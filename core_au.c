@@ -21,6 +21,7 @@ mv core_au.so ~/.config/radare2/plugins
 
 static int waveType = 0;
 static int waveFreq = 500;
+static int printMode = 0;
 
 enum {
 	FORM_SIN,      // .''.''.
@@ -137,7 +138,6 @@ char *sample_new(float freq, int form, int *size) {
 	return buffer;
 }
 
-
 static bool au_init() {
 	ao_initialize();
 
@@ -190,6 +190,9 @@ static bool au_write(RCore *core, const char *args) {
 		break;
 	case 's':
 		sample = sample_new (arg, FORM_SIN, &size);
+		break;
+	case 't':
+		sample = sample_new (arg, FORM_TRIANGLE, &size);
 		break;
 	case 'i':
 		sample = sample_new (arg, FORM_INC, &size);
@@ -271,11 +274,11 @@ r_cons_printf ("\n");
 #endif
 #if 1
 	if (w < 1) w = 1;
-	int min = 4200;
+	int min = 32768; //4200;
 	int step = 1;
 	for (i = 0; i < nwords; i+=step) {
 		int x = i;
-		int y = ((words[i]) + min) / 2048;
+		int y = ((words[i]) + min) / 4096;
 		if (y < 1) {
 			y = 1;
 		}
@@ -290,21 +293,21 @@ r_cons_printf ("\n");
 	return true;
 }
 
-static const char *asciin() {
+static const char *asciin(int waveType) {
 	int mod = waveType % 4;
-switch( mod) {
-case 0:
-	return "sinus";
-case 1:
-	return "cos..";
-case 2:
-	return "tri..";
-case 3:
-	return "pulse";
-case 4:
-	return "noise";
-
-}
+	switch (mod) {
+	case 0:
+		return "sinus";
+	case 1:
+		return "cos..";
+	case 2:
+		return "tri..";
+	case 3:
+		return "pulse";
+	case 4:
+		return "noise";
+	}
+	return NULL;
 }
 
 static const char *asciis(int i) {
@@ -332,6 +335,20 @@ const char **aiis = {
 	asciiWavePulse,
 };
 
+typedef struct note_t {
+	int type;
+	int freq;
+	// TODO: add array of filters like volume, attack, decay, ...
+} AUNote;
+
+static AUNote notes[10];
+
+static void au_note_set(RCore *core, int note) {
+	notes[note].type = waveType;
+	notes[note].freq = waveFreq;
+}
+
+
 static bool au_visual(RCore *core) {
 	r_cons_flush ();
 	r_cons_print_clear ();
@@ -345,20 +362,62 @@ static bool au_visual(RCore *core) {
 		const char *wave = asciis(waveType);
 		const char *waveName = asciin(waveType);
 		r_cons_clear00 ();
-		printWave (core);
-		r_cons_gotoxy (0, 0);
+		//r_cons_gotoxy (0, 0);
 		r_cons_printf ("[VisualWave] [0x%08"PFMT64x"] [%04x] %s %s freq %d\n",
 			core->offset, tdiff, wave, waveName, waveFreq);
+		switch (printMode % 2) {
+		case 0:
+			printWave (core);
+			break;
+		case 1:
+		//	r_cons_gotoxy (0, 2);
+			r_core_cmdf (core, "pxd2 ($r*16)-64");
+			break;
+		}
 		if (tdiff + 1 > otdiff) {
 		//	r_core_cmd (core, "au.", 0);
 		}
-r_cons_flush();
+		r_cons_flush();
 	//	r_cons_visual_flush ();
 		int ch = r_cons_readchar_timeout (500);
 		char waveTypeChar = "sctp"[waveType%4];
 		switch (ch) {
-		case '0'...'9':
-			
+		case 'p':
+			printMode++;
+			break;
+		case 'P':
+			printMode--;
+			break;
+		case '1':
+			au_note_set (core, 0);
+			break;
+		case '2':
+			au_note_set (core, 1);
+			break;
+		case '3':
+			au_note_set (core, 2);
+			break;
+		case '4':
+			au_note_set (core, 3);
+			break;
+		case '5':
+			au_note_set (core, 4);
+			break;
+		case '6':
+			au_note_set (core, 5);
+			break;
+		case '7':
+			au_note_set (core, 6);
+			break;
+		case '8':
+			au_note_set (core, 7);
+			break;
+		case '9':
+			au_note_set (core, 8);
+			break;
+		case '0':
+			au_note_set (core, 9);
+			break;
 		case 'J':
 			break;
 		case '+':
