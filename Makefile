@@ -3,6 +3,9 @@ CFLAGS+=$(shell pkg-config --cflags r_util)
 CFLAGS+=-g
 LDFLAGS+=$(shell pkg-config --libs r_util r_io r_cons r_core)
 LDFLAGS+=-lao
+ifeq($(shell uname),Linux)
+LDFLAGS+=-lm
+endif
 LIBEXT=$(shell r2 -H LIBEXT)
 
 all:
