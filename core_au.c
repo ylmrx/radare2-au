@@ -22,6 +22,7 @@ mv core_au.so ~/.config/radare2/plugins
 static int waveType = 0;
 static int waveFreq = 500;
 static int printMode = 0;
+static bool zoomMode = false;
 
 enum {
 	FORM_SIN,      // .''.''.
@@ -463,6 +464,7 @@ static bool printWave(RCore *core) {
 	int x , y, h;
 	int i, nwords = core->blocksize / 2;
 	int w = r_cons_get_size (&h) - 10;
+	
 #if 0
 	h = 20;
 
@@ -475,10 +477,10 @@ static bool printWave(RCore *core) {
 #endif
 #if 1
 	if (w < 1) w = 1;
-	int min = 32768; //4200;
-	int step = 1;
-	for (i = 0; i < nwords; i+=step) {
-		int x = i;
+	int j, min = 32768; //4200;
+	int step = zoomMode? 2: 1;
+	for (i = j= 0; i < nwords; i+=step,j ++) {
+		int x = j;
 		int y = ((words[i]) + min) / 4096;
 		if (y < 1) {
 			y = 1;
@@ -487,9 +489,10 @@ static bool printWave(RCore *core) {
 			break;
 		}
 		r_cons_gotoxy (x, y + 3);
-		r_cons_printf ("#");
+		r_cons_printf (Color_MAGENTA"#"Color_RESET);
 		// r_cons_printf ("%d %d - ", x, y);
 	}
+	r_cons_gotoxy (0, h - 4);
 #endif
 	return true;
 }
@@ -568,6 +571,7 @@ static bool au_visual_help(RCore *core) {
 	r_cons_printf (" jk -> change wave type (sin, saw, ..)\n");
 	r_cons_printf (" hl -> seek around the buffer\n");
 	r_cons_printf (" HL -> seek faster around the buffer\n");
+	r_cons_printf (" R  -> randomize color theme\n");
 	r_cons_printf (" n  -> assign current freq+type into [0-9] key\n");
 	r_cons_printf (" 0-9-> play and write the recorded note\n");
 	r_cons_printf (" +- -> increment/decrement the frequency\n");
@@ -593,14 +597,26 @@ static bool au_visual(RCore *core) {
 		const char *wave = asciis(waveType);
 		const char *waveName = asciin(waveType);
 		r_cons_clear00 ();
-		//r_cons_gotoxy (0, 0);
-		r_cons_printf ("[VisualWave] [0x%08"PFMT64x"] [%04x] %s %s freq %d\n",
+		r_cons_printf ("[r2:auv] [0x%08"PFMT64x"] [%04x] %s %s freq %d\n",
 			core->offset, tdiff, wave, waveName, waveFreq);
-		switch (printMode % 2) {
+		switch (printMode % 4) {
 		case 0:
 			printWave (core);
 			break;
 		case 1:
+			r_core_cmdf (core, "pze ($r*16)-(64 * 5)");
+			printWave (core);
+			break;
+		case 2:
+		//	r_cons_gotoxy (0, 2);
+			r_core_cmdf (core, "pze ($r*16)-64");
+			break;
+		case 3:
+		//	r_cons_gotoxy (0, 2);
+			r_core_cmdf (core, "pxd2 ($r*16)-64");
+			printWave (core);
+			break;
+		case 4:
 		//	r_cons_gotoxy (0, 2);
 			r_core_cmdf (core, "pxd2 ($r*16)-64");
 			break;
@@ -662,6 +678,12 @@ r_cons_flush();
 				sleep(1);
 			}
 			break;
+		case 'R':
+			// honor real random themes: r_core_cmdf (core, "ecr");
+			r_core_cmdf (core, "ecn");
+			break;
+		case 'K':
+			break;
 		case 'J':
 			break;
 		case '+':
@@ -681,7 +703,7 @@ r_cons_flush();
 			r_core_visual_prompt_input (core);
 			break;
 		case 'H':
-			r_core_seek_delta (core, -32);
+			r_core_seek_delta (core, zoomMode? -512: -128);
 			break;
 		case 'h':
 			r_core_seek_delta (core, -2);
@@ -690,7 +712,10 @@ r_cons_flush();
 			r_core_seek_delta (core, 2);
 			break;
 		case 'L':
-			r_core_seek_delta (core, 32);
+			r_core_seek_delta (core, zoomMode? 512: 128);
+			break;
+		case 'z':
+			zoomMode = !zoomMode;
 			break;
 		case 'j':
 			waveType++;
