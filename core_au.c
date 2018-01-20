@@ -23,6 +23,9 @@ static int waveType = 0;
 static int waveFreq = 500;
 static int printMode = 0;
 static bool zoomMode = false;
+static bool cursorMode = false;
+static int cursorPos = 0;
+static int animateMode = 0;
 
 enum {
 	FORM_SIN,      // .''.''.
@@ -292,7 +295,7 @@ char *sample_new(float freq, int form, int *size) {
 			sample = s;
 			break;
 		}
-		sample *= volume;
+		//sample *= volume;
 // printf ("SAMP %d\n", sample);
 		/* left channel */
 		word[i] = sample;
@@ -386,7 +389,8 @@ static bool au_write(RCore *core, const char *args) {
 	if (size > 0) {
 		int i;
 		for (i = 0; i < core->blocksize ; i+= size) {
-			r_io_write_at (core->io, core->offset + i, (const ut8*)sample, size);
+			int left = R_MIN (size, core->blocksize -i);
+			r_io_write_at (core->io, core->offset + i, (const ut8*)sample, left);
 		}
 	}
 	r_core_block_read (core);
@@ -479,8 +483,15 @@ static bool printWave(RCore *core) {
 	if (w < 1) w = 1;
 	int j, min = 32768; //4200;
 	int step = zoomMode? 2: 1;
+if (cursorMode) {
+for (i = 0; i<h; i++) {
+r_cons_gotoxy (cursorPos + 2, i);
+r_cons_printf ("|");
+}
+}
+int oy = 0;
 	for (i = j= 0; i < nwords; i+=step,j ++) {
-		int x = j;
+		int x = j + 2;
 		int y = ((words[i]) + min) / 4096;
 		if (y < 1) {
 			y = 1;
@@ -488,8 +499,16 @@ static bool printWave(RCore *core) {
 		if (x + 1 >= w) {
 			break;
 		}
-		r_cons_gotoxy (x, y + 3);
-		r_cons_printf (Color_MAGENTA"#"Color_RESET);
+		if (cursorMode && x == cursorPos + 2) {
+			r_cons_gotoxy (x - 1, y + 3);
+			r_cons_printf ("[#]");
+			oy = y;
+		} else if (cursorMode && x == cursorPos + 3 && y == oy) {
+			// do nothing
+		} else {
+			r_cons_gotoxy (x, y + 3);
+			r_cons_printf (Color_MAGENTA"*"Color_RESET);
+		}
 		// r_cons_printf ("%d %d - ", x, y);
 	}
 	r_cons_gotoxy (0, h - 4);
@@ -582,6 +601,7 @@ static bool au_visual_help(RCore *core) {
 
 	r_cons_flush(); // use less here
 	r_cons_readchar();
+	return true;
 }
 
 static bool au_visual(RCore *core) {
@@ -594,9 +614,15 @@ static bool au_visual(RCore *core) {
 	while (true) {
 		now = r_sys_now () / 1000 / 500;
 		int tdiff = now - base;
-		const char *wave = asciis(waveType);
+		const char *wave = asciis(tdiff);
 		const char *waveName = asciin(waveType);
 		r_cons_clear00 ();
+		if (tdiff + 1 > otdiff) {
+		//	r_core_cmd (core, "au.", 0);
+			if (animateMode) {
+				r_core_cmd0 (core, "s+2");
+			}
+		}
 		r_cons_printf ("[r2:auv] [0x%08"PFMT64x"] [%04x] %s %s freq %d\n",
 			core->offset, tdiff, wave, waveName, waveFreq);
 		switch (printMode % 4) {
@@ -621,19 +647,22 @@ static bool au_visual(RCore *core) {
 			r_core_cmdf (core, "pxd2 ($r*16)-64");
 			break;
 		}
-		if (tdiff + 1 > otdiff) {
-		//	r_core_cmd (core, "au.", 0);
-		}
 		r_cons_flush();
 	//	r_cons_visual_flush ();
 		int ch = r_cons_readchar_timeout (500);
 		char waveTypeChar = "sctpn-idz"[waveType % 9];
 		switch (ch) {
+		case 'a':
+			animateMode = !animateMode;
+			break;
 		case 'p':
 			printMode++;
 			break;
 		case 'P':
 			printMode--;
+			break;
+		case 'c':
+			cursorMode = !cursorMode;
 			break;
 		case '0':
 			au_note_play (core, 0);
@@ -687,13 +716,13 @@ r_cons_flush();
 		case 'J':
 			break;
 		case '+':
-			waveFreq += 20;
+			waveFreq += 10;
 			r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
 			r_core_cmd0 (core, "au.");
 			break;
 		case '-':
-			waveFreq -= 20;
-			if (waveFreq < 20) {
+			waveFreq -= 10;
+			if (waveFreq < 10) {
 				waveFreq = 10;
 			}
 			r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
@@ -706,10 +735,20 @@ r_cons_flush();
 			r_core_seek_delta (core, zoomMode? -512: -128);
 			break;
 		case 'h':
-			r_core_seek_delta (core, -2);
+			if (cursorMode) {
+				if (cursorPos > 0) {
+					cursorPos--;
+				}
+			} else {
+				r_core_seek_delta (core, -2);
+			}
 			break;
 		case 'l':
-			r_core_seek_delta (core, 2);
+			if (cursorMode) {
+				cursorPos++;
+			} else {
+				r_core_seek_delta (core, 2);
+			}
 			break;
 		case 'L':
 			r_core_seek_delta (core, zoomMode? 512: 128);
