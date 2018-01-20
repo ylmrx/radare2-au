@@ -55,6 +55,159 @@ short sample;
 ao_device *device = NULL;
 ao_sample_format format = {0};
 
+void sample_filter(char *buf, int size, int filter, int value) {
+	int i, j;
+	int isize = size / 2;
+	short *ibuf = (short*)buf;
+	switch (filter) {
+	case FILTER_ATTACK:
+		value = isize / 100 * value;
+		for (i = 0; i < isize; i++) {
+			if (i < value) {
+				int total_pending = value;
+				int pending = value - i;
+				float mul = pending / total_pending;
+				ibuf[i] *= mul;
+			}
+		}
+		break;
+	case FILTER_DECAY:
+		value = isize / 100 * value;
+		for (i = 0; i < isize; i++) {
+			if (i >= value) {
+				float total_pending = isize - value;
+				float pending = isize - i;
+				float mul = pending / total_pending;
+				ibuf[i] *= mul;
+			}
+		}
+		break;
+	case FILTER_XOR:
+		for (i = 0; i + value< isize; i++) {
+			// ibuf[i] ^= value; //ibuf[i + 1];
+			ibuf[i] ^= ibuf[i + value];
+		}
+		break;
+	case FILTER_INVERT:
+		for (i = 0; i < isize; i++) {
+			ibuf[i] = -ibuf[i];
+		}
+		break;
+	case FILTER_DEC:
+	case FILTER_INC:
+		for (i = 0; i < isize; i++) {
+			float pc = (float)i / (float)format.rate * 100;
+			if (FILTER_INC == filter) {
+				pc = 100 - pc;
+			}
+			pc /= value;
+			pc += 1;
+			if (!((int)i % (int)pc)) {
+				ibuf[i] = 0xffff / 2;
+			}
+			else {
+				//	sample = -max_sample;
+			}
+		}
+		break;
+	case FILTER_SHIFT:
+		value = (isize / 100 * value);
+		if (value > 0) {
+			const int max = isize - value;
+			for (i = 0; i < max; i++) {
+				ibuf[i] = ibuf[i + value];
+			}
+			for (i = max; i < value; i++) {
+				ibuf[i] = 0;
+			}
+		}
+		else {
+			/* TODO */
+			const int max = isize - value;
+			for (i = isize; i > value; i--) {
+				ibuf[i] = ibuf[i - value];
+			}
+			for (i = 0; i < value; i++) {
+				ibuf[i] = 0;
+			}
+		}
+		break;
+	case FILTER_SIGN:
+		if (value > 0) {
+			for (i = 0; i < isize; i++) {
+				if (ibuf[i] > 0) {
+					ibuf[i] = 0;
+				}
+			}
+		}
+		else {
+			for (i = 0; i < isize; i++) {
+				if (ibuf[i] < 0) {
+					ibuf[i] = 0;
+				}
+			}
+		}
+		break;
+	case FILTER_ROTATE:
+		if (value > 0) {
+			short *tmp = calloc(sizeof(short), value);
+			for (i = 0; i< value; i++) {
+				tmp[i] = ibuf[i];
+			}
+			const int max = isize - value;
+			for (i = 0; i < max; i++) {
+				ibuf[i] = ibuf[i + value];
+			}
+			for (i = max; i < value; i++) {
+				ibuf[i] = tmp[i - max];
+			}
+			free(tmp);
+		}
+		else {
+			/* TODO */
+		}
+		break;
+	case FILTER_INTERLACE:
+		if (value < 2) {
+			value = 2;
+		}
+		for (i = 0; i < size / 2; i++) {
+			if (!((i / value) % value)) {
+				for (j = 0; j< value; j++) {
+					ibuf[i] = 0;
+				}
+			}
+		}
+		break;
+	case FILTER_SCALE:
+		if (value < 100) {
+			int j = value;
+			for (i = 0; i + j < isize; i++) {
+				ibuf[i] = ibuf[i + j];
+				j++;
+			}
+			int base;
+			for (base = i; i< isize; i++) {
+				ibuf[i] = ibuf[i - base];
+			}
+		}
+		else {
+			// TODO
+		}
+		break;
+	case FILTER_MOD:
+		for (i = 0; i < isize; i++) {
+			ibuf[i] = ibuf[i] / value * value;
+		}
+		break;
+	case FILTER_VOLUME:
+		for (i = 0; i < isize; i++) {
+			ibuf[i] *= ((float)value / 100);
+		}
+		break;
+	}
+}
+
 char *sample_new(float freq, int form, int *size) {
 	int i;
 	short sample; // float ?
@@ -110,11 +263,15 @@ char *sample_new(float freq, int form, int *size) {
 			{
 				int rate = 14000 / freq;
 				sample = ((i % rate) * (max_sample * 2) / rate) - max_sample;
+				sample = -sample;
 				// printf ("%f\n", (float)sample);
 			}
 			break;
 		case FORM_TRIANGLE:
 			{
+				if (freq < 1) {
+					freq = 1;
+				}
 				int rate = (14000 / freq) * 2;
 				sample = ((i % rate) * (max_sample * 2) / rate) - max_sample;
 			}
@@ -124,6 +281,14 @@ char *sample_new(float freq, int form, int *size) {
 			break;
 		case FORM_NOISE:
 			sample = (rand() % (int)(max_sample * 2)) - max_sample;
+			int s = (int)sample * (freq / 1000);
+			if (s > 32700) {
+				s = 32700;
+			}
+			if (s < -32700) {
+				s = -32700;
+			}
+			sample = s;
 			break;
 		}
 		sample *= volume;
@@ -135,6 +300,7 @@ char *sample_new(float freq, int form, int *size) {
 		// buffer[(2 * i) + 1] = ((unsigned short)sample >> 8) & 0xff;
 		// i++;
 	}
+	// sample_filter (buffer, buf_size, FILTER_SIGN, 1);
 	return buffer;
 }
 
@@ -255,6 +421,41 @@ const char *asciiWavePulse[4] = {
 	"|_|'|_|'",
 };
 
+const char *asciiWaveNoise[4] = {
+	"/:./|.:/",
+	":./|.:/:",
+	"./|.:/:.",
+	"/|.:/:./"
+};
+
+const char *asciiWaveSilence[4] = {
+	"________",
+	"________",
+	"________",
+	"________",
+};
+
+const char *asciiWaveIncrement[4] = {
+	"_..---''",
+	"_..---''",
+	"_..---''",
+	"_..---''",
+};
+
+const char *asciiWaveDecrement[4] = {
+	"''---.._",
+	"''---.._",
+	"''---.._",
+	"''---.._",
+};
+
+const char *asciiWaveSaw[4] = {
+	"/|/|/|/|",
+	"|/|/|/|/",
+	"/|/|/|/|",
+	"|/|/|/|/",
+};
+
 static bool printWave(RCore *core) {
 	short sample = 0;
 	short *words = (short*)core->block;
@@ -269,7 +470,7 @@ static bool printWave(RCore *core) {
 		for (x = 0; x<w; x++) {
 			r_cons_printf ("#");
 		}
-r_cons_printf ("\n");
+		r_cons_printf ("\n");
 	}
 #endif
 #if 1
@@ -294,36 +495,34 @@ r_cons_printf ("\n");
 }
 
 static const char *asciin(int waveType) {
-	int mod = waveType % 4;
+	int mod = waveType % 9;
 	switch (mod) {
-	case 0:
-		return "sinus";
-	case 1:
-		return "cos..";
-	case 2:
-		return "tri..";
-	case 3:
-		return "pulse";
-	case 4:
-		return "noise";
+	case 0: return "sinus";
+	case 1: return "cos..";
+	case 2: return "tri..";
+	case 3: return "pulse";
+	case 4: return "noise";
+	case 5: return "silen";
+	case 6: return "incrm";
+	case 7: return "decrm";
+	case 8: return "saw..";
 	}
 	return NULL;
 }
 
 static const char *asciis(int i) {
-	int mod = waveType % 4;
+	int mod = waveType % 9;
 	i %= 4;
 	switch (mod) {
-	case 0:
-		return asciiWaveSin[i];
-	case 1:
-		return asciiWaveCos[i];
-	case 2:
-		return asciiWaveTriangle[i];
-	case 3:
-		return asciiWavePulse[i];
-	// case 4:
-	//	return asciiWaveNoise[i];
+	case 0: return asciiWaveSin[i];
+	case 1: return asciiWaveCos[i];
+	case 2: return asciiWaveTriangle[i];
+	case 3: return asciiWavePulse[i];
+	case 4: return asciiWaveNoise[i];
+	case 5: return asciiWaveSilence[i];
+	case 6: return asciiWaveIncrement[i];
+	case 7: return asciiWaveDecrement[i];
+	case 8: return asciiWaveSaw[i];
 	}
 	return NULL;
 }
@@ -333,21 +532,53 @@ const char **aiis = {
 	asciiWaveCos,
 	asciiWaveTriangle,
 	asciiWavePulse,
+	asciiWaveNoise,
+	asciiWaveSilence,
+	asciiWaveIncrement,
+	asciiWaveDecrement,
+	asciiWaveSaw,
 };
 
 typedef struct note_t {
 	int type;
 	int freq;
+	int bsize; // TODO
 	// TODO: add array of filters like volume, attack, decay, ...
 } AUNote;
 
 static AUNote notes[10];
+
+static void au_note_play(RCore *core, int note) {
+	waveType = notes[note].type;
+	waveFreq = notes[note].freq;
+	
+	char waveTypeChar = "sctpn-idz"[waveType % 9];
+	r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
+	r_core_cmd0 (core, "au.");
+}
 
 static void au_note_set(RCore *core, int note) {
 	notes[note].type = waveType;
 	notes[note].freq = waveFreq;
 }
 
+static bool au_visual_help(RCore *core) {
+	r_cons_clear00 ();
+	r_cons_printf ("Usage: auv - visual mode for audio processing\n\n");
+	r_cons_printf (" jk -> change wave type (sin, saw, ..)\n");
+	r_cons_printf (" hl -> seek around the buffer\n");
+	r_cons_printf (" HL -> seek faster around the buffer\n");
+	r_cons_printf (" n  -> assign current freq+type into [0-9] key\n");
+	r_cons_printf (" 0-9-> play and write the recorded note\n");
+	r_cons_printf (" +- -> increment/decrement the frequency\n");
+	r_cons_printf (" pP -> rotate print modes\n");
+	r_cons_printf (" .  -> play current block\n");
+	r_cons_printf (" i  -> insert current note in current offset\n");
+	r_cons_printf (" :  -> type r2 command\n");
+
+	r_cons_flush(); // use less here
+	r_cons_readchar();
+}
 
 static bool au_visual(RCore *core) {
 	r_cons_flush ();
@@ -380,7 +611,7 @@ static bool au_visual(RCore *core) {
 		r_cons_flush();
 	//	r_cons_visual_flush ();
 		int ch = r_cons_readchar_timeout (500);
-		char waveTypeChar = "sctp"[waveType%4];
+		char waveTypeChar = "sctpn-idz"[waveType % 9];
 		switch (ch) {
 		case 'p':
 			printMode++;
@@ -388,35 +619,48 @@ static bool au_visual(RCore *core) {
 		case 'P':
 			printMode--;
 			break;
+		case '0':
+			au_note_play (core, 0);
+			break;
 		case '1':
-			au_note_set (core, 0);
+			au_note_play (core, 1);
 			break;
 		case '2':
-			au_note_set (core, 1);
+			au_note_play (core, 2);
 			break;
 		case '3':
-			au_note_set (core, 2);
+			au_note_play (core, 3);
 			break;
 		case '4':
-			au_note_set (core, 3);
+			au_note_play (core, 4);
 			break;
 		case '5':
-			au_note_set (core, 4);
+			au_note_play (core, 5);
 			break;
 		case '6':
-			au_note_set (core, 5);
+			au_note_play (core, 6);
 			break;
 		case '7':
-			au_note_set (core, 6);
+			au_note_play (core, 7);
 			break;
 		case '8':
-			au_note_set (core, 7);
+			au_note_play (core, 8);
 			break;
 		case '9':
-			au_note_set (core, 8);
+			au_note_play (core, 9);
 			break;
-		case '0':
-			au_note_set (core, 9);
+		case 'n':
+			r_cons_printf ("\nWhich note? (1 2 3 4 5 6 7 8 9 0) \n");
+r_cons_flush();
+			int ch = r_cons_readchar ();
+			if (ch >= '0' && ch <= '9') {
+				au_note_set (core, ch - '0');
+			} else if (ch == 'q') {
+				// foo
+			} else {
+				eprintf ("Invalid char\n");
+				sleep(1);
+			}
 			break;
 		case 'J':
 			break;
@@ -427,8 +671,8 @@ static bool au_visual(RCore *core) {
 			break;
 		case '-':
 			waveFreq -= 20;
-			if (waveFreq < 50) {
-				waveFreq = 50;
+			if (waveFreq < 20) {
+				waveFreq = 10;
 			}
 			r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
 			r_core_cmd0 (core, "au.");
@@ -450,6 +694,9 @@ static bool au_visual(RCore *core) {
 			break;
 		case 'j':
 			waveType++;
+			break;
+		case '?':
+			au_visual_help (core);
 			break;
 		case 'k':
 			waveType--;
