@@ -311,7 +311,7 @@ char *sample_new(float freq, int form, int *size) {
 static bool au_init() {
 	ao_initialize();
 
-	int default_driver = ao_default_driver_id();
+	int default_driver = ao_default_driver_id ();
 
 	format.bits = 16; // SID is 16bit, 8bit sounds too much like PDP
 	format.channels = 1;
@@ -321,9 +321,23 @@ static bool au_init() {
 
 	device = ao_open_live (default_driver, &format, NULL /* no options */);
 	if (!device) {
-		fprintf(stderr, "Error opening device.\n");
+		fprintf (stderr, "core_au: Error opening audio device.\n");
 		return false;
 	}
+	// seems like we need to feed it once to make it work
+	{
+		int len = 1024;
+		char *silence = calloc(sizeof(short), len);
+		ao_play (device, silence, len);
+		free (silence);
+	}
+	return true;
+}
+
+static bool au_fini() {
+	ao_close (device);
+	device = NULL;
+	ao_shutdown ();
 	return true;
 }
 
@@ -483,13 +497,13 @@ static bool printWave(RCore *core) {
 	if (w < 1) w = 1;
 	int j, min = 32768; //4200;
 	int step = zoomMode? 2: 1;
-if (cursorMode) {
-for (i = 0; i<h; i++) {
-r_cons_gotoxy (cursorPos + 2, i);
-r_cons_printf ("|");
-}
-}
-int oy = 0;
+	if (cursorMode) {
+		for (i = 0; i<h; i++) {
+			r_cons_gotoxy (cursorPos + 2, i);
+			r_cons_printf ("|");
+		}
+	}
+	int oy = 0;
 	for (i = j= 0; i < nwords; i+=step,j ++) {
 		int x = j + 2;
 		int y = ((words[i]) + min) / 4096;
@@ -758,12 +772,16 @@ r_cons_flush();
 			break;
 		case 'j':
 			waveType++;
+			r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
+			r_core_cmd0 (core, "au.");
 			break;
 		case '?':
 			au_visual_help (core);
 			break;
 		case 'k':
 			waveType--;
+			r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
+			r_core_cmd0 (core, "au.");
 			break;
 		case 'i':
 			r_core_cmdf (core, "auws %d", waveFreq);
@@ -801,7 +819,6 @@ static int _cmd_au (RCore *core, const char *args) {
 		printWave (core);
 		break;
 	case '.':
-		// write pattern here
 		au_play (core);
 		break;
 	case 'v':
