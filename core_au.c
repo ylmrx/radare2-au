@@ -19,6 +19,8 @@ mv core_au.so ~/.config/radare2/plugins
 #undef R_IPI
 #define R_IPI static
 
+#define WAVETYPES 10
+
 static int waveType = 0;
 static int waveFreq = 500;
 static int printMode = 0;
@@ -31,6 +33,7 @@ enum {
 	FORM_SIN,      // .''.''.
 	FORM_COS,      // '..'..'
 	FORM_SAW,      // /|/|/|/
+	FORM_ANTISAW,  // |\|\|\|
 	FORM_PULSE,    // |_|'|_|
 	FORM_NOISE,    // \:./|.:
 	FORM_TRIANGLE, // /\/\/\/
@@ -55,9 +58,9 @@ enum {
 	FILTER_SCALE,     // *=
 };
 
-short sample;
-ao_device *device = NULL;
-ao_sample_format format = {0};
+static short sample;
+static ao_device *device = NULL;
+static ao_sample_format format = {0};
 
 void sample_filter(char *buf, int size, int filter, int value) {
 	int i, j;
@@ -124,8 +127,7 @@ void sample_filter(char *buf, int size, int filter, int value) {
 			for (i = max; i < value; i++) {
 				ibuf[i] = 0;
 			}
-		}
-		else {
+		} else {
 			/* TODO */
 			const int max = isize - value;
 			for (i = isize; i > value; i--) {
@@ -143,8 +145,7 @@ void sample_filter(char *buf, int size, int filter, int value) {
 					ibuf[i] = 0;
 				}
 			}
-		}
-		else {
+		} else {
 			for (i = 0; i < isize; i++) {
 				if (ibuf[i] < 0) {
 					ibuf[i] = 0;
@@ -230,7 +231,7 @@ char *sample_new(float freq, int form, int *size) {
 		// eprintf ("sz = %d\n", *size);
 	}
 	short *word = (short*)(buffer);
-	int words = buf_size / sizeof(short);
+	int words = buf_size / sizeof (short);
 	for (i = 0; i < words; i++) {
 		// sample = (char)(max_sample * sin(2 * M_PI * freq * ((float)i / format.rate * 2)));
 //		sample = (char)(max_sample * sin(i * (freq / format.rate))); // 2 * M_PI * freq * ((float)i / format.rate * 2)));
@@ -268,6 +269,14 @@ char *sample_new(float freq, int form, int *size) {
 				int rate = 14000 / freq;
 				sample = ((i % rate) * (max_sample * 2) / rate) - max_sample;
 				sample = -sample;
+				// printf ("%f\n", (float)sample);
+			}
+			break;
+		case FORM_ANTISAW:
+			{
+				int rate = 14000 / freq;
+				sample = ((i % rate) * (max_sample * 2) / rate) - max_sample;
+				//sample = -sample;
 				// printf ("%f\n", (float)sample);
 			}
 			break;
@@ -349,6 +358,7 @@ static void au_help(RCore *core) {
 		" (s)in    .''.''.\n"
 		" (c)os    '..'..'\n"
 		" (z)aw    /|/|/|/\n"
+		" (Z)aw    \\|\\|\\|\\\n"
 		" (p)ulse  |_|'|_|\n"
 		" (n)oise  /:./|.:\n"
 		" (t)ri..  /\\/\\/\\/\n"
@@ -395,6 +405,9 @@ static bool au_write(RCore *core, const char *args) {
 		break;
 	case 'z':
 		sample = sample_new (arg, FORM_SAW, &size);
+		break;
+	case 'Z':
+		sample = sample_new (arg, FORM_ANTISAW, &size);
 		break;
 	case '-':
 		sample = sample_new (arg, FORM_SILENCE, &size);
@@ -475,6 +488,13 @@ const char *asciiWaveSaw[4] = {
 	"|/|/|/|/",
 };
 
+const char *asciiWaveAntiSaw[4] = {
+	"\\|\\|\\|\\|",
+	"|\\|\\|\\|\\",
+	"\\|\\|\\|\\|",
+	"|\\|\\|\\|\\",
+};
+
 static bool printWave(RCore *core) {
 	short sample = 0;
 	short *words = (short*)core->block;
@@ -531,7 +551,7 @@ static bool printWave(RCore *core) {
 }
 
 static const char *asciin(int waveType) {
-	int mod = waveType % 9;
+	int mod = waveType % WAVETYPES;
 	switch (mod) {
 	case 0: return "sinus";
 	case 1: return "cos..";
@@ -542,12 +562,13 @@ static const char *asciin(int waveType) {
 	case 6: return "incrm";
 	case 7: return "decrm";
 	case 8: return "saw..";
+	case 9: return "ansaw";
 	}
 	return NULL;
 }
 
 static const char *asciis(int i) {
-	int mod = waveType % 9;
+	int mod = waveType % WAVETYPES;
 	i %= 4;
 	switch (mod) {
 	case 0: return asciiWaveSin[i];
@@ -559,11 +580,12 @@ static const char *asciis(int i) {
 	case 6: return asciiWaveIncrement[i];
 	case 7: return asciiWaveDecrement[i];
 	case 8: return asciiWaveSaw[i];
+	case 9: return asciiWaveAntiSaw[i];
 	}
 	return NULL;
 }
 
-const char **aiis = {
+const char **aiis[WAVETYPES] = {
 	asciiWaveSin,
 	asciiWaveCos,
 	asciiWaveTriangle,
@@ -573,6 +595,7 @@ const char **aiis = {
 	asciiWaveIncrement,
 	asciiWaveDecrement,
 	asciiWaveSaw,
+	asciiWaveAntiSaw,
 };
 
 typedef struct note_t {
@@ -588,7 +611,7 @@ static void au_note_play(RCore *core, int note) {
 	waveType = notes[note].type;
 	waveFreq = notes[note].freq;
 	
-	char waveTypeChar = "sctpn-idz"[waveType % 9];
+	char waveTypeChar = "sctpn-idzZ"[waveType % WAVETYPES];
 	r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
 	r_core_cmd0 (core, "au.");
 }
@@ -664,7 +687,7 @@ static bool au_visual(RCore *core) {
 		r_cons_flush();
 	//	r_cons_visual_flush ();
 		int ch = r_cons_readchar_timeout (500);
-		char waveTypeChar = "sctpn-idz"[waveType % 9];
+		char waveTypeChar = "sctpn-idzZ"[waveType % WAVETYPES];
 		switch (ch) {
 		case 'a':
 			animateMode = !animateMode;
@@ -755,6 +778,7 @@ r_cons_flush();
 				}
 			} else {
 				r_core_seek_delta (core, -2);
+				r_core_cmd0 (core, "au.");
 			}
 			break;
 		case 'l':
@@ -762,6 +786,7 @@ r_cons_flush();
 				cursorPos++;
 			} else {
 				r_core_seek_delta (core, 2);
+				r_core_cmd0 (core, "au.");
 			}
 			break;
 		case 'L':
