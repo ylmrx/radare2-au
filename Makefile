@@ -7,9 +7,10 @@ ifeq ($(shell uname),Linux)
 LDFLAGS+=-lm
 endif
 LIBEXT=$(shell r2 -H LIBEXT)
+R2P=$(shell r2 -H USER_PLUGINS)
 
 all:
 	$(CC) $(CFLAGS) $(LDFLAGS) cpu.c audio.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC core_au.c -o core_au.$(LIBEXT)
-	mkdir -p ~/.config/radare2/plugins
-	cp -rf core_au.$(LIBEXT)* ~/.config/radare2/plugins
+	mkdir -p $(R2P)
+	cp -rf core_au.$(LIBEXT)* $(R2P)
