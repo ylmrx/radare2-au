@@ -14,3 +14,4 @@ all:
 	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC core_au.c -o core_au.$(LIBEXT)
 	mkdir -p $(R2P)
 	cp -rf core_au.$(LIBEXT)* $(R2P)
+	r2 -c 'b 4K;aui;aup' -c auv malloc://64K

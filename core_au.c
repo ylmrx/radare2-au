@@ -19,12 +19,16 @@ mv core_au.so ~/.config/radare2/plugins
 #undef R_IPI
 #define R_IPI static
 
-#define WAVETYPES 10
+#define WAVETYPES 11
+#define WAVECMD "sctpPn-idzZ"
 
 static int waveType = 0;
 static int waveFreq = 500;
+static int cycleSize = 220;
+static int toneSize = 4096; // 0x1000
 static int printMode = 0;
 static bool zoomMode = false;
+static int zoomLevel = 1;
 static bool cursorMode = false;
 static int cursorPos = 0;
 static int animateMode = 0;
@@ -34,7 +38,8 @@ enum {
 	FORM_COS,      // '..'..'
 	FORM_SAW,      // /|/|/|/
 	FORM_ANTISAW,  // |\|\|\|
-	FORM_PULSE,    // |_|'|_|
+	FORM_PULSE,    // '_'_'_'
+	FORM_VPULSE,   // '__'__'
 	FORM_NOISE,    // \:./|.:
 	FORM_TRIANGLE, // /\/\/\/
 	FORM_SILENCE,  // ______
@@ -216,6 +221,7 @@ void sample_filter(char *buf, int size, int filter, int value) {
 char *sample_new(float freq, int form, int *size) {
 	int i;
 	short sample; // float ?
+	float wax_sample = format.bits == 16 ? 0xffff / 2 : 0xff / 2;
 	float max_sample = format.bits == 16 ? 0xffff / 2 : 0xff / 2;
 	float volume = 1; // 0.8;
 	float pc;
@@ -287,10 +293,18 @@ char *sample_new(float freq, int form, int *size) {
 				}
 				int rate = (14000 / freq) * 2;
 				sample = ((i % rate) * (max_sample * 2) / rate) - max_sample;
+				if (sample > max_sample / 8) {
+					sample = -sample;
+				}
+				sample *= 2; // interesting ascii art wave
+				// XXX: half wave :?
 			}
 			break;
 		case FORM_PULSE:
-			sample = sample > 0 ? max_sample : -max_sample;
+			sample = sample > 0? max_sample : -max_sample;
+			break;
+		case FORM_VPULSE:
+			sample = sample > 0x7000? -max_sample : max_sample;
 			break;
 		case FORM_NOISE:
 			sample = (rand() % (int)(max_sample * 2)) - max_sample;
@@ -400,6 +414,9 @@ static bool au_write(RCore *core, const char *args) {
 	case 'p':
 		sample = sample_new (arg, FORM_PULSE, &size);
 		break;
+	case 'P':
+		sample = sample_new (arg, FORM_VPULSE, &size);
+		break;
 	case 'n':
 		sample = sample_new (arg, FORM_NOISE, &size);
 		break;
@@ -451,6 +468,13 @@ const char *asciiWavePulse[4] = {
 	"|'|_|'|_",
 	"'|_|'|_|",
 	"|_|'|_|'",
+};
+
+const char *asciiWaveVPulse[4] = {
+	"__'___'_",
+	"_'___'__",
+	"'___'___",
+	"___'___'",
 };
 
 const char *asciiWaveNoise[4] = {
@@ -524,7 +548,8 @@ static bool printWave(RCore *core) {
 		}
 	}
 	int oy = 0;
-	for (i = j= 0; i < nwords; i+=step,j ++) {
+	step *= zoomLevel;
+	for (i = j = 0; i < nwords; i += step, j++) {
 		int x = j + 2;
 		int y = ((words[i]) + min) / 4096;
 		if (y < 1) {
@@ -557,12 +582,13 @@ static const char *asciin(int waveType) {
 	case 1: return "cos..";
 	case 2: return "tri..";
 	case 3: return "pulse";
-	case 4: return "noise";
-	case 5: return "silen";
-	case 6: return "incrm";
-	case 7: return "decrm";
-	case 8: return "saw..";
-	case 9: return "ansaw";
+	case 4: return "vpuls";
+	case 5: return "noise";
+	case 6: return "silen";
+	case 7: return "incrm";
+	case 8: return "decrm";
+	case 9: return "saw..";
+	case 10: return "ansaw";
 	}
 	return NULL;
 }
@@ -575,12 +601,13 @@ static const char *asciis(int i) {
 	case 1: return asciiWaveCos[i];
 	case 2: return asciiWaveTriangle[i];
 	case 3: return asciiWavePulse[i];
-	case 4: return asciiWaveNoise[i];
-	case 5: return asciiWaveSilence[i];
-	case 6: return asciiWaveIncrement[i];
-	case 7: return asciiWaveDecrement[i];
-	case 8: return asciiWaveSaw[i];
-	case 9: return asciiWaveAntiSaw[i];
+	case 4: return asciiWaveVPulse[i];
+	case 5: return asciiWaveNoise[i];
+	case 6: return asciiWaveSilence[i];
+	case 7: return asciiWaveIncrement[i];
+	case 8: return asciiWaveDecrement[i];
+	case 9: return asciiWaveSaw[i];
+	case 10: return asciiWaveAntiSaw[i];
 	}
 	return NULL;
 }
@@ -611,7 +638,7 @@ static void au_note_play(RCore *core, int note) {
 	waveType = notes[note].type;
 	waveFreq = notes[note].freq;
 	
-	char waveTypeChar = "sctpn-idzZ"[waveType % WAVETYPES];
+	char waveTypeChar = WAVECMD[waveType % WAVETYPES];
 	r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
 	r_core_cmd0 (core, "au.");
 }
@@ -636,9 +663,30 @@ static bool au_visual_help(RCore *core) {
 	r_cons_printf (" i  -> insert current note in current offset\n");
 	r_cons_printf (" :  -> type r2 command\n");
 
-	r_cons_flush(); // use less here
-	r_cons_readchar();
+	r_cons_flush (); // use less here
+	r_cons_readchar ();
 	return true;
+}
+
+static void editCycle (RCore *core, int step) {
+	// adjust wave (use [] to specify the width to be affected)
+	short data = 0;
+	r_io_read_at (core->io, core->offset + (cursorPos*2), &data, 2);
+	data += step;
+	r_io_write_at (core->io, core->offset + (cursorPos*2), &data, 2);
+
+	char *cycle = malloc (cycleSize);
+	if (!cycle) {
+		return;
+	}
+	r_io_read_at (core->io, core->offset, cycle, cycleSize);
+	int i;
+	for (i = cycleSize; i<core->blocksize; i+= cycleSize) {
+		r_io_write_at (core->io, core->offset + i, cycle, cycleSize);
+	}
+	free (cycle);
+	r_core_block_read (core);
+	r_core_cmd0 (core, "au.");
 }
 
 static bool au_visual(RCore *core) {
@@ -651,8 +699,8 @@ static bool au_visual(RCore *core) {
 	while (true) {
 		now = r_sys_now () / 1000 / 500;
 		int tdiff = now - base;
-		const char *wave = asciis(tdiff);
-		const char *waveName = asciin(waveType);
+		const char *wave = asciis (tdiff);
+		const char *waveName = asciin (waveType);
 		r_cons_clear00 ();
 		if (tdiff + 1 > otdiff) {
 		//	r_core_cmd (core, "au.", 0);
@@ -660,8 +708,8 @@ static bool au_visual(RCore *core) {
 				r_core_cmd0 (core, "s+2");
 			}
 		}
-		r_cons_printf ("[r2:auv] [0x%08"PFMT64x"] [%04x] %s %s freq %d\n",
-			core->offset, tdiff, wave, waveName, waveFreq);
+		r_cons_printf ("[r2:auv] [0x%08"PFMT64x"] [%04x] %s %s freq %d block %d cursor %d cycle %d zoom %d\n",
+			core->offset, tdiff, wave, waveName, waveFreq, toneSize, cursorPos, cycleSize, zoomLevel);
 		switch (printMode % 4) {
 		case 0:
 			printWave (core);
@@ -687,7 +735,7 @@ static bool au_visual(RCore *core) {
 		r_cons_flush();
 	//	r_cons_visual_flush ();
 		int ch = r_cons_readchar_timeout (500);
-		char waveTypeChar = "sctpn-idzZ"[waveType % WAVETYPES];
+		char waveTypeChar = WAVECMD[waveType % WAVETYPES];
 		switch (ch) {
 		case 'a':
 			animateMode = !animateMode;
@@ -748,28 +796,55 @@ r_cons_flush();
 			// honor real random themes: r_core_cmdf (core, "ecr");
 			r_core_cmdf (core, "ecn");
 			break;
+		case 'f':
+			{
+				RCons *I = r_cons_singleton ();
+				r_line_set_prompt ("(freq)> ");
+				I->line->contents = r_str_newf ("%d", toneSize);
+				char *buf = r_line_readline ();
+				waveFreq = r_num_math (core->num, buf);
+				I->line->contents = NULL;
+				r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
+				r_core_cmd0 (core, "au.");
+			}
+			break;
+		case 'b':
+			{
+				RCons *I = r_cons_singleton ();
+				r_line_set_prompt ("audio block size> ");
+				I->line->contents = r_str_newf ("%d", toneSize);
+				char *buf = r_line_readline ();
+				toneSize = r_num_math (core->num, buf);
+				I->line->contents = NULL;
+			}
+			break;
 		case 'K':
 			break;
 		case 'J':
 			break;
 		case '+':
-			waveFreq += 10;
-			r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
-			r_core_cmd0 (core, "au.");
+			if (cursorMode) {
+				editCycle (core, -0x1000);
+			} else {
+				waveFreq += 10;
+				r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
+				r_core_cmd0 (core, "au.");
+			}
 			break;
 		case '-':
-			waveFreq -= 10;
-			if (waveFreq < 10) {
-				waveFreq = 10;
+			if (cursorMode) {
+				editCycle (core, 0x1000);
+			} else {
+				waveFreq -= 10;
+				if (waveFreq < 10) {
+					waveFreq = 10;
+				}
+				r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
+				r_core_cmd0 (core, "au.");
 			}
-			r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
-			r_core_cmd0 (core, "au.");
 			break;
 		case ':':
 			r_core_visual_prompt_input (core);
-			break;
-		case 'H':
-			r_core_seek_delta (core, zoomMode? -512: -128);
 			break;
 		case 'h':
 			if (cursorMode) {
@@ -789,27 +864,70 @@ r_cons_flush();
 				r_core_cmd0 (core, "au.");
 			}
 			break;
+		case 'H':
+			r_core_seek_delta (core, -toneSize); // zoomMode? -512: -128);
+			r_core_cmd0 (core, "au.");
+			break;
 		case 'L':
-			r_core_seek_delta (core, zoomMode? 512: 128);
+			r_core_seek_delta (core, toneSize); // zoomMode? 512: 128);
+			r_core_cmd0 (core, "au.");
 			break;
 		case 'z':
 			zoomMode = !zoomMode;
 			break;
 		case 'j':
-			waveType++;
-			r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
-			r_core_cmd0 (core, "au.");
+			if (cursorMode) {
+				editCycle(core, 0x1000);
+			} else {
+				waveType++;
+				waveTypeChar = WAVECMD[waveType % WAVETYPES];
+				r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
+				r_core_cmd0 (core, "au.");
+			}
 			break;
 		case '?':
 			au_visual_help (core);
 			break;
 		case 'k':
-			waveType--;
-			r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
-			r_core_cmd0 (core, "au.");
+			if (cursorMode) {
+				editCycle(core, -0x1000);
+			} else {
+				waveType--;
+				if (waveType < 0) {
+					waveType = 0;
+				}
+				waveTypeChar = WAVECMD[waveType % WAVETYPES];
+				r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
+				r_core_cmd0 (core, "au.");
+			}
 			break;
 		case 'i':
 			r_core_cmdf (core, "auws %d", waveFreq);
+			break;
+		case '[':
+			if (cursorMode) {
+				cycleSize -= 2;
+				if (cycleSize < 0) {				
+					cycleSize = 0;
+				}
+				editCycle (core, 0);
+			} else {
+				zoomLevel--;
+				if (zoomLevel < 1) {
+					zoomLevel = 1;
+				}
+			}
+			break;
+		case ']':
+			if (cursorMode) {
+				cycleSize += 2;
+				if (cycleSize < 0) {				
+					cycleSize = 0;
+				}
+				editCycle (core, 0);
+			} else {
+				zoomLevel++;
+			}
 			break;
 		case '.':
 			// TODO : run in a thread?
@@ -840,7 +958,7 @@ static int _cmd_au (RCore *core, const char *args) {
 		// write pattern here
 		au_write (core, args + 1);
 		break;
-	case 'p':
+	case 'p': // "aup"
 		printWave (core);
 		break;
 	case '.':
