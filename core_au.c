@@ -1,4 +1,5 @@
-/* radare - LGPL - Copyright 2018 - pancake */
+/* radare - MIT - Copyright 2018 - pancake */
+
 #if 0
 gcc -o core_au.so -fPIC `pkg-config --cflags --libs r_core` core_test.c -shared
 mkdir -p ~/.config/radare2/plugins
@@ -21,6 +22,10 @@ mv core_au.so ~/.config/radare2/plugins
 
 #define WAVETYPES 11
 #define WAVECMD "sctpPn-idzZ"
+
+#define WAVERATE 22050
+// SID is 16bit, 8bit sounds too much like PDP
+#define WAVEBITS 16
 
 static int waveType = 0;
 static int waveFreq = 500;
@@ -331,16 +336,15 @@ char *sample_new(float freq, int form, int *size) {
 	return buffer;
 }
 
-static bool au_init() {
-	ao_initialize();
+static bool au_init(int rate, int bits, int endian) {
+	ao_initialize ();
 
 	int default_driver = ao_default_driver_id ();
-
-	format.bits = 16; // SID is 16bit, 8bit sounds too much like PDP
+	format.byte_format = endian? AO_FMT_BIG: AO_FMT_LITTLE;
+	format.rate = rate;
+	format.bits = bits;
 	format.channels = 1;
-	format.rate = 22050;
 	// format.rate = 11025;
-	format.byte_format = AO_FMT_LITTLE;
 
 	device = ao_open_live (default_driver, &format, NULL /* no options */);
 	if (!device) {
@@ -385,7 +389,7 @@ static void au_help(RCore *core) {
 static bool au_write(RCore *core, const char *args) {
 	int size = 0;
 	char *sample = NULL;
-	ut64 narg = r_num_math (core->num, args + 1);
+	ut64 narg = *args? r_num_math (core->num, args + 1): 0;
 	float arg = narg;
 // eprintf ("ARG (%d)\n", (int)arg);
 	if (arg == 0) {
@@ -952,7 +956,11 @@ static int _cmd_au (RCore *core, const char *args) {
 	switch (*args) {
 	case 'i':
 		// setup arguments here
-		au_init ();
+		{
+			int be = r_config_get_i (core->config, "cfg.bigendian");
+			// TODO: register 'e au.rate' 'au.bits'... ?
+			au_init (WAVERATE, WAVEBITS, be);
+		}
 		break;
 	case 'w':
 		// write pattern here

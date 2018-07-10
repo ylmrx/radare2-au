@@ -431,7 +431,7 @@ Assembly proposal
 == == == == == == == == =
 
 mkw s0, 0, 1500
-ps s0
+play s0
 
 alw s0, 0
 alw s1, 0
@@ -448,8 +448,7 @@ frw s0
 frw s1
 
 #endif
-int main()
-{
+int main() {
 	int default_driver;
 	int sample2;
 	//float freq = 440.0;
