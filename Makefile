@@ -12,6 +12,25 @@ R2P=$(shell r2 -H USER_PLUGINS)
 all:
 	$(CC) $(CFLAGS) $(LDFLAGS) cpu.c audio.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC core_au.c -o core_au.$(LIBEXT)
+	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC asm_au.c -o asm_au.$(LIBEXT)
+	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC anal_au.c -o anal_au.$(LIBEXT)
+
+install:
 	mkdir -p $(R2P)
+	cp -rf asm_au.$(LIBEXT)* $(R2P)
+	cp -rf anal_au.$(LIBEXT)* $(R2P)
 	cp -rf core_au.$(LIBEXT)* $(R2P)
+
+test:
+	r2 -a au -b 32 -i test.r2  malloc://1M
+
+test2:
 	r2 -c 'b 4K;aui;aup' -c auv malloc://64K
+
+uninstall:
+	rm $(R2P)/*au.$(LIBEXT)*
+
+m:
+	$(MAKE) all
+	$(MAKE) install
+	r2 -a au -b 32 malloc://1M

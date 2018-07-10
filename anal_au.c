@@ -12,10 +12,14 @@ static int typeChar(const ut8 t) {
 	return '?';
 }
 
-static int aucpu_esil_mkw (RAnalOp *op, const ut8 *data) {
+static void aucpu_esil_wave(RAnalOp *op, const ut8 *data) {
 	int type = typeChar(data[1]);
 	int freq = ((data[2]<< 8) | data[3]) << 2;
-	r_strbuf_setf (&op->esil, "#!auw%c %d@ r0!r1", type, freq);
+	if (freq == 0) {
+		r_strbuf_setf (&op->esil, ","); // do nothing
+	} else {
+		r_strbuf_setf (&op->esil, "#!auw%c %d@ r0!r1", type, freq);
+	}
 }
 
 static int _au_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
@@ -31,6 +35,27 @@ static int _au_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len)
 	case AUCPU_OP_PLAY:
 		op->type = R_ANAL_OP_TYPE_SWI;
 		r_strbuf_setf (&op->esil, "#!au.@ r0!r1");
+		op->size = 2;
+		break;
+	case AUCPU_OP_PLAYREG:
+		op->size = 2;
+		op->type = R_ANAL_OP_TYPE_SWI;
+		{
+			int r0 = data[1] & 0xf;
+			int r1 = (data[1] & 0xf0) >> 4;
+			r_strbuf_setf (&op->esil, "#!au.@ r%d!r%d", r0, r1);
+		}
+		break;
+	case AUCPU_OP_TRAP:
+		op->type = R_ANAL_OP_TYPE_TRAP;
+		break;
+	case AUCPU_OP_MOVREG:
+		op->type = R_ANAL_OP_TYPE_MOV;
+		{
+			int r0 = data[1] & 0xf;
+			int r1 = (data[1] & 0xf0) >> 4;
+			r_strbuf_setf (&op->esil, "r%d,r%d,=", r0, r1);
+		}
 		break;
 	case AUCPU_OP_MOV:
 		op->type = R_ANAL_OP_TYPE_MOV;
@@ -40,27 +65,65 @@ static int _au_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len)
 			r_strbuf_setf (&op->esil, "%d,r%d,=", v, r);
 		}
 		break;
-	case AUCPU_OP_MKW:
+	case AUCPU_OP_WAVE:
 		op->type = R_ANAL_OP_TYPE_STORE;
-		aucpu_esil_mkw (op, data);
+		aucpu_esil_wave (op, data);
+		break;
+	case AUCPU_OP_WAIT:
+		op->type = R_ANAL_OP_TYPE_NOP;
+		{
+			int v = (data[2] << 8) | data[3];
+			int r = data[1];
+			op->cycles = v;
+			r_strbuf_setf (&op->esil, "#!!sleep %d", v);
+		}
+		break;
+	case AUCPU_OP_JMP:
+		{
+			int r0 = data[1] & 0xf;
+			int r1 = (data[1] & 0xf0);
+			if (r1) {
+				int v = (data[2] << 8) | data[3];
+				if (r1 == 0xf0) {
+					r_strbuf_setf (&op->esil, "%d,pc,-=", r0);
+				} else {
+					r_strbuf_setf (&op->esil, "%d,pc,+,4,pc,=", r0);
+				}
+				op->size = 4;
+			} else {
+				r_strbuf_setf (&op->esil, "r%d,pc,+=", r0);
+				op->size = 2;
+			}
+		}
 		break;
 	defaultr:
 		r_strbuf_setf (&op->esil, "#!?E hello world");
 		break;
 	}
-	return 4;
+	return op->size;
 }
 
 static int set_reg_profile(RAnal *anal) {
 	char *p =
 		"=PC	pc\n"
+		"=BP	sp\n"
 		"=SP	sp\n"
-		"gpr	pc	.32	0	0\n"
-		"gpr	sp	.32	4	0\n"
-		"gpr	r0	.32	8	0\n"
-		"gpr	r1	.32	12	0\n"
-		"gpr	r2	.32	16	0\n"
-		"gpr	r3	.32	20	0\n"
+		"gpr	r0	.32	0	0\n"
+		"gpr	r1	.32	4	0\n"
+		"gpr	r2	.32	8	0\n"
+		"gpr	r3	.32	12	0\n"
+		"gpr	r4	.32	16	0\n"
+		"gpr	r5	.32	20	0\n"
+		"gpr	r6	.32	24	0\n"
+		"gpr	r7	.32	28	0\n"
+		"gpr	r8	.32	32	0\n"
+		"gpr	r9	.32	36	0\n"
+		"gpr	r10	.32	40	0\n"
+		"gpr	r11	.32	44	0\n"
+		"gpr	r12	.32	48	0\n"
+		"gpr	sp	.32	52	0\n"
+		"gpr	bp	.32	56	0\n"
+		"gpr	pc	.32	60	0\n"
 
 		"gpr	flags	.8	.192	0\n"
 		"gpr	C	.1	.192	0\n"

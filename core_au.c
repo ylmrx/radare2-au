@@ -340,20 +340,21 @@ static bool au_init(int rate, int bits, int endian) {
 	ao_initialize ();
 
 	int default_driver = ao_default_driver_id ();
+	memset (&format, 0, sizeof (format));
 	format.byte_format = endian? AO_FMT_BIG: AO_FMT_LITTLE;
 	format.rate = rate;
 	format.bits = bits;
 	format.channels = 1;
 	// format.rate = 11025;
 
-	device = ao_open_live (default_driver, &format, NULL /* no options */);
+	device = ao_open_live (default_driver, &format, NULL);
 	if (!device) {
 		fprintf (stderr, "core_au: Error opening audio device.\n");
 		return false;
 	}
 	// seems like we need to feed it once to make it work
-	{
-		int len = 1024;
+	if (1){
+		int len = 4096;
 		char *silence = calloc(sizeof(short), len);
 		ao_play (device, silence, len);
 		free (silence);
@@ -954,22 +955,23 @@ static bool au_play(RCore *core) {
 
 static int _cmd_au (RCore *core, const char *args) {
 	switch (*args) {
-	case 'i':
+	case 'i': // "aui"
 		// setup arguments here
 		{
 			int be = r_config_get_i (core->config, "cfg.bigendian");
 			// TODO: register 'e au.rate' 'au.bits'... ?
 			au_init (WAVERATE, WAVEBITS, be);
+			// ao_play (device, (char *)core->block, core->blocksize);
 		}
 		break;
-	case 'w':
+	case 'w': // "auw"
 		// write pattern here
 		au_write (core, args + 1);
 		break;
 	case 'p': // "aup"
 		printWave (core);
 		break;
-	case '.':
+	case '.': // "aw."
 		au_play (core);
 		break;
 	case 'v':
