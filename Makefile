@@ -9,11 +9,19 @@ endif
 LIBEXT=$(shell r2 -H LIBEXT)
 R2P=$(shell r2 -H USER_PLUGINS)
 
-all:
-	$(CC) $(CFLAGS) $(LDFLAGS) cpu.c audio.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC core_au.c -o core_au.$(LIBEXT)
+all: a.out core_au.$(LIBEXT) asm_au.$(LIBEXT) anal_au.$(LIBEXT)
+
+asm_au.$(LIBEXT): asm_au.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC asm_au.c -o asm_au.$(LIBEXT)
+
+anal_au.$(LIBEXT): anal_au.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC anal_au.c -o anal_au.$(LIBEXT)
+
+core_au.$(LIBEXT): core_au.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC core_au.c -o core_au.$(LIBEXT)
+
+a.out:
+	$(CC) $(CFLAGS) $(LDFLAGS) cpu.c audio.c
 
 install:
 	mkdir -p $(R2P)
