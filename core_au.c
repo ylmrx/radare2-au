@@ -24,6 +24,7 @@ mv core_au.so ~/.config/radare2/plugins
 #define WAVECMD "sctpPn-idzZ"
 
 #define WAVERATE 22050
+// #define WAVERATE 44100
 // SID is 16bit, 8bit sounds too much like PDP
 #define WAVEBITS 16
 
@@ -353,9 +354,9 @@ static bool au_init(int rate, int bits, int endian) {
 		return false;
 	}
 	// seems like we need to feed it once to make it work
-	if (1){
+	if (0) {
 		int len = 4096;
-		char *silence = calloc(sizeof(short), len);
+		char *silence = calloc (sizeof (short), len);
 		ao_play (device, silence, len);
 		free (silence);
 	}

@@ -7,9 +7,11 @@ ifeq ($(shell uname),Linux)
 LDFLAGS+=-lm
 endif
 LIBEXT=$(shell r2 -H LIBEXT)
-R2P=$(shell r2 -H USER_PLUGINS)
+R2P=$(shell r2 -H R2_USER_PLUGINS)
 
-all: a.out core_au.$(LIBEXT) asm_au.$(LIBEXT) anal_au.$(LIBEXT)
+LIBS=core_au.$(LIBEXT) asm_au.$(LIBEXT) anal_au.$(LIBEXT)
+
+all: a.out $(LIBS)
 
 asm_au.$(LIBEXT): asm_au.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC asm_au.c -o asm_au.$(LIBEXT)
@@ -28,6 +30,9 @@ install:
 	cp -rf asm_au.$(LIBEXT)* $(R2P)
 	cp -rf anal_au.$(LIBEXT)* $(R2P)
 	cp -rf core_au.$(LIBEXT)* $(R2P)
+
+clean:
+	rm -f $(LIBS)
 
 test:
 	r2 -a au -b 32 -i test.r2  malloc://1M
