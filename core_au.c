@@ -38,6 +38,10 @@ static int zoomLevel = 1;
 static bool cursorMode = false;
 static int cursorPos = 0;
 static int animateMode = 0;
+static int aBlocksize = 1024*8;
+
+#define captureBlocksize() int obs = core->blocksize; r_core_block_size(core, aBlocksize)
+#define restoreBlocksize() r_core_block_size (core, obs)
 
 enum {
 	FORM_SIN,      // .''.''.
@@ -166,18 +170,20 @@ void sample_filter(char *buf, int size, int filter, int value) {
 		break;
 	case FILTER_ROTATE:
 		if (value > 0) {
-			short *tmp = calloc(sizeof(short), value);
-			for (i = 0; i< value; i++) {
-				tmp[i] = ibuf[i];
+			short *tmp = calloc (sizeof (short), value);
+			if (tmp) {
+				for (i = 0; i < value; i++) {
+					tmp[i] = ibuf[i];
+				}
+				const int max = isize - value;
+				for (i = 0; i < max; i++) {
+					ibuf[i] = ibuf[i + value];
+				}
+				for (i = max; i < value; i++) {
+					ibuf[i] = tmp[i - max];
+				}
+				free(tmp);
 			}
-			const int max = isize - value;
-			for (i = 0; i < max; i++) {
-				ibuf[i] = ibuf[i + value];
-			}
-			for (i = max; i < value; i++) {
-				ibuf[i] = tmp[i - max];
-			}
-			free(tmp);
 		}
 		else {
 			/* TODO */
@@ -337,7 +343,7 @@ char *sample_new(float freq, int form, int *size) {
 	return buffer;
 }
 
-static bool au_init(int rate, int bits, int endian) {
+static bool au_init(int rate, int bits, int channels, int endian) {
 	ao_initialize ();
 
 	int default_driver = ao_default_driver_id ();
@@ -345,7 +351,7 @@ static bool au_init(int rate, int bits, int endian) {
 	format.byte_format = endian? AO_FMT_BIG: AO_FMT_LITTLE;
 	format.rate = rate;
 	format.bits = bits;
-	format.channels = 1;
+	format.channels = channels;
 	// format.rate = 11025;
 
 	device = ao_open_live (default_driver, &format, NULL);
@@ -386,6 +392,74 @@ static void au_help(RCore *core) {
 		" (i)nc    _..--''\n"
 		" (d)ec    ''--.._\n"
 	);
+}
+
+static bool au_mix(RCore *core, const char *args) {
+	ut64 narg = *args? r_num_math (core->num, args + 1): 0;
+	float arg = narg;
+	if (arg == 0) {
+		eprintf("Usage: aum \n");
+		return true;
+	}
+	const int bs = core->blocksize;
+	eprintf ("mixing from %llx to %llx\n", narg, core->offset);
+	short *dst = calloc (bs, 1);
+	short *src = calloc (bs, 1);
+	if (!src || !dst) {
+		return false;
+	}
+	r_io_read_at (core->io, core->offset, dst, bs);
+	r_io_read_at (core->io, narg, src, bs);
+	for (int i = 0; i< core->blocksize / 2; i++) {
+		dst[i] += src[i];
+	}
+	r_io_write_at (core->io, core->offset, dst, bs);
+	return true;
+}
+
+static bool au_operate(RCore *core, const char *args) {
+	ut64 narg = *args? r_num_math (core->num, args + 1): 0;
+	float arg = narg;
+	const int bs = core->blocksize;
+	if (arg == 0) {
+		au_help (core);
+		return true;
+	}
+	short *dst = calloc (bs, 1);
+	if (!dst) {
+		return false;
+	}
+	r_io_read_at (core->io, core->offset, dst, bs);
+eprintf ("ARG (%s)\n", args);
+	switch (*args) {
+	case '=':
+		for (int i = 0; i< core->blocksize / 2; i++) {
+			dst[i] = arg; //src[i];
+		}
+		break;
+	case '+':
+		for (int i = 0; i< core->blocksize / 2; i++) {
+			dst[i] += arg;
+		}
+		break;
+	case '-':
+		for (int i = 0; i< core->blocksize / 2; i++) {
+			dst[i] -= arg;
+		}
+		break;
+	case '/':
+		for (int i = 0; i< core->blocksize / 2; i++) {
+			dst[i] /= arg;
+		}
+		break;
+	case '*':
+		for (int i = 0; i< core->blocksize / 2; i++) {
+			dst[i] *= arg;
+		}
+		break;
+	}
+	r_io_write_at (core->io, core->offset, dst, bs);
+	return true;
 }
 
 static bool au_write(RCore *core, const char *args) {
@@ -524,6 +598,12 @@ const char *asciiWaveAntiSaw[4] = {
 	"\\|\\|\\|\\|",
 	"|\\|\\|\\|\\",
 };
+
+extern int print_piano (int off, int nth);
+
+static bool printPiano(RCore *core) {
+	print_piano (core->offset, 30);
+}
 
 static bool printWave(RCore *core) {
 	short sample = 0;
@@ -716,7 +796,7 @@ static bool au_visual(RCore *core) {
 		}
 		r_cons_printf ("[r2:auv] [0x%08"PFMT64x"] [%04x] %s %s freq %d block %d cursor %d cycle %d zoom %d\n",
 			core->offset, tdiff, wave, waveName, waveFreq, toneSize, cursorPos, cycleSize, zoomLevel);
-		switch (printMode % 4) {
+		switch (printMode % 5) {
 		case 0:
 			printWave (core);
 			break;
@@ -736,6 +816,9 @@ static bool au_visual(RCore *core) {
 		case 4:
 		//	r_cons_gotoxy (0, 2);
 			r_core_cmdf (core, "pxd2 ($r*16)-64");
+			break;
+		case 5:
+			print_piano (0, 40);
 			break;
 		}
 		r_cons_flush();
@@ -959,31 +1042,70 @@ static int _cmd_au (RCore *core, const char *args) {
 	case 'i': // "aui"
 		// setup arguments here
 		{
+			int channels = 1;
 			int be = r_config_get_i (core->config, "cfg.bigendian");
 			// TODO: register 'e au.rate' 'au.bits'... ?
-			au_init (WAVERATE, WAVEBITS, be);
+			eprintf ("[au] %d Hz %d bits %d channels\n", WAVERATE, WAVEBITS, channels);
+			au_init (WAVERATE, WAVEBITS, channels, be);
 			// ao_play (device, (char *)core->block, core->blocksize);
 		}
+		break;
+	case 'm': // "aum"
+		// write pattern here
+		au_mix (core, args + 1);
+		r_core_block_read (core);
 		break;
 	case 'w': // "auw"
 		// write pattern here
 		au_write (core, args + 1);
+		r_core_block_read (core);
+		break;
+	case 'b': // "aub"
+		if (args[1] == ' ') {
+			aBlocksize = r_num_math (core->num, args + 2);
+		} else {
+			r_cons_printf ("0x%"PFMT64x"\n", aBlocksize);
+		}
+		break;
+	case 'o': // "auo"
+		if (args[1]) {
+			au_operate (core, args + 1);
+			r_core_block_read (core);
+		} else {
+		}
 		break;
 	case 'p': // "aup"
-		printWave (core);
+		switch (args[1]) {
+		case 'p':
+			printPiano (core);
+			break;
+		case '?':
+			eprintf ("Usage: aup[p] arg\n");
+			break;
+		default:
+			printWave (core);
+			break;
+		}
 		break;
-	case '.': // "aw."
-		au_play (core);
+	case '.': // "au."
+		{
+			captureBlocksize();
+			au_play (core);
+			restoreBlocksize();
+		}
 		break;
 	case 'v':
 		au_visual (core);
 		break;
 	default:
 	case '?':
-		eprintf ("Usage: au[i] [args]\n");
+		eprintf ("Usage: au[imopPwv] [args]\n");
 		eprintf (" aui - init audio\n");
 		eprintf (" au. - play current block\n");
-		eprintf (" aup - print wave\n");
+		eprintf (" aub - audio blocksize\n");
+		eprintf (" aum - mix from given address into current with bsize\n");
+		eprintf (" auo - apply operation with immediate\n");
+		eprintf (" aup - print wave (aupi print piano)\n");
 		eprintf (" auw - write wave (see auw?)\n");
 		eprintf (" auv - visual wave mode\n");
 		break;
