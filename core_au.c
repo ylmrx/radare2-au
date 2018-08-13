@@ -14,6 +14,7 @@ mv core_au.so ~/.config/radare2/plugins
 #include "ao.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include "notes.c"
 
 #undef R_API
 #define R_API static
@@ -39,6 +40,7 @@ static bool cursorMode = false;
 static int cursorPos = 0;
 static int animateMode = 0;
 static int aBlocksize = 1024*8;
+static int keyboard_offset = 0;
 
 #define captureBlocksize() int obs = core->blocksize; r_core_block_size(core, aBlocksize)
 #define restoreBlocksize() r_core_block_size (core, obs)
@@ -233,8 +235,8 @@ void sample_filter(char *buf, int size, int filter, int value) {
 char *sample_new(float freq, int form, int *size) {
 	int i;
 	short sample; // float ?
-	float wax_sample = format.bits == 16 ? 0xffff / 2 : 0xff / 2;
-	float max_sample = format.bits == 16 ? 0xffff / 2 : 0xff / 2;
+	float wax_sample = format.bits == 16 ? 0xffff / 3 : 0xff / 3;
+	float max_sample = format.bits == 16 ? 0xffff / 3 : 0xff / 3;
 	float volume = 1; // 0.8;
 	float pc;
 	// int buf_size = format.bits / 8 * format.channels * format.rate;
@@ -253,7 +255,7 @@ char *sample_new(float freq, int form, int *size) {
 	for (i = 0; i < words; i++) {
 		// sample = (char)(max_sample * sin(2 * M_PI * freq * ((float)i / format.rate * 2)));
 //		sample = (char)(max_sample * sin(i * (freq / format.rate))); // 2 * M_PI * freq * ((float)i / format.rate * 2)));
-		sample = (short) max_sample * sin (freq * (2 * M_PI) * i / format.rate);
+		// sample = (short) max_sample * sin (freq * (2 * M_PI) * i / format.rate);
 // eprintf ("%d ", sample);
 
   // buffer[i] = sin(1000 * (2 * pi) * i / 44100);
@@ -280,7 +282,7 @@ char *sample_new(float freq, int form, int *size) {
 			sample = (int)(max_sample * cos (2 * M_PI * freq * ((float)i / format.rate * 2)));
 			break;
 		case FORM_SIN:
-			// do nothing
+			sample = (short) max_sample * sin (freq * (2 * M_PI) * i / format.rate);
 			break;
 		case FORM_SAW:
 			{
@@ -430,7 +432,6 @@ static bool au_operate(RCore *core, const char *args) {
 		return false;
 	}
 	r_io_read_at (core->io, core->offset, dst, bs);
-eprintf ("ARG (%s)\n", args);
 	switch (*args) {
 	case '=':
 		for (int i = 0; i< core->blocksize / 2; i++) {
@@ -602,7 +603,8 @@ const char *asciiWaveAntiSaw[4] = {
 extern int print_piano (int off, int nth);
 
 static bool printPiano(RCore *core) {
-	print_piano (core->offset, 30);
+	int w = r_cons_get_size (NULL);
+	print_piano (keyboard_offset, w / 3);
 }
 
 static bool printWave(RCore *core) {
@@ -720,7 +722,20 @@ typedef struct note_t {
 
 static AUNote notes[10];
 
-static void au_note_play(RCore *core, int note) {
+static void au_note_playtone(RCore *core, int note) {
+	int idx = keyboard_offset + note;
+	waveType = notes[note].type;
+	float toneFreq = notes_freq (note);
+	char waveTypeChar = WAVECMD[waveType % WAVETYPES];
+	r_core_cmdf (core, "auw%c %d", waveTypeChar, (int)toneFreq);
+	r_core_cmd0 (core, "au.");
+}
+
+static void au_note_play(RCore *core, int note, bool keyboard_visible) {
+	if (keyboard_visible) {
+		au_note_playtone (core, note);
+		return;
+	}
 	waveType = notes[note].type;
 	waveFreq = notes[note].freq;
 	
@@ -782,6 +797,7 @@ static bool au_visual(RCore *core) {
 
 	ut64 now, base = r_sys_now () / 1000 / 500;
 	int otdiff = 0;
+	bool keyboard_visible = false;
 	while (true) {
 		now = r_sys_now () / 1000 / 500;
 		int tdiff = now - base;
@@ -796,32 +812,41 @@ static bool au_visual(RCore *core) {
 		}
 		r_cons_printf ("[r2:auv] [0x%08"PFMT64x"] [%04x] %s %s freq %d block %d cursor %d cycle %d zoom %d\n",
 			core->offset, tdiff, wave, waveName, waveFreq, toneSize, cursorPos, cycleSize, zoomLevel);
+		int minus = 64;
+		if (keyboard_visible) {
+			int w = r_cons_get_size (NULL);
+			print_piano (keyboard_offset, w / 3);
+			minus = 128;
+		}
 		switch (printMode % 5) {
 		case 0:
 			printWave (core);
 			break;
 		case 1:
-			r_core_cmdf (core, "pze ($r*16)-(64 * 5)");
+			r_core_cmdf (core, "pze ($r*16)-(%d * 5)", minus);
 			printWave (core);
 			break;
 		case 2:
 		//	r_cons_gotoxy (0, 2);
-			r_core_cmdf (core, "pze ($r*16)-64");
+			r_core_cmdf (core, "pze ($r*16)-%d", minus);
 			break;
 		case 3:
 		//	r_cons_gotoxy (0, 2);
-			r_core_cmdf (core, "pxd2 ($r*16)-64");
+			r_core_cmdf (core, "pxd2 ($r*16)-%d", minus);
 			printWave (core);
 			break;
 		case 4:
 		//	r_cons_gotoxy (0, 2);
-			r_core_cmdf (core, "pxd2 ($r*16)-64");
+			r_core_cmdf (core, "pxd2 ($r*16)-%d", minus);
 			break;
 		case 5:
-			print_piano (0, 40);
+			{
+			int zoom = 0;
+			r_core_cmdf (core, "p=2 %d", zoom);
+			}
 			break;
 		}
-		r_cons_flush();
+		r_cons_flush ();
 	//	r_cons_visual_flush ();
 		int ch = r_cons_readchar_timeout (500);
 		char waveTypeChar = WAVECMD[waveType % WAVETYPES];
@@ -839,34 +864,41 @@ static bool au_visual(RCore *core) {
 			cursorMode = !cursorMode;
 			break;
 		case '0':
-			au_note_play (core, 0);
+			au_note_play (core, 0, keyboard_visible);
 			break;
 		case '1':
-			au_note_play (core, 1);
+			au_note_play (core, 1, keyboard_visible);
 			break;
 		case '2':
-			au_note_play (core, 2);
+			au_note_play (core, 2, keyboard_visible);
 			break;
 		case '3':
-			au_note_play (core, 3);
+			au_note_play (core, 3, keyboard_visible);
 			break;
 		case '4':
-			au_note_play (core, 4);
+			au_note_play (core, 4, keyboard_visible);
 			break;
 		case '5':
-			au_note_play (core, 5);
+			au_note_play (core, 5, keyboard_visible);
 			break;
 		case '6':
-			au_note_play (core, 6);
+			au_note_play (core, 6, keyboard_visible);
 			break;
 		case '7':
-			au_note_play (core, 7);
+			au_note_play (core, 7, keyboard_visible);
 			break;
 		case '8':
-			au_note_play (core, 8);
+			au_note_play (core, 8, keyboard_visible);
 			break;
 		case '9':
-			au_note_play (core, 9);
+			au_note_play (core, 9, keyboard_visible);
+			break;
+		case '=':
+			if (keyboard_visible) {
+				keyboard_visible = false;
+			} else {
+				keyboard_visible = true;
+			}
 			break;
 		case 'n':
 			r_cons_printf ("\nWhich note? (1 2 3 4 5 6 7 8 9 0) \n");
@@ -936,21 +968,36 @@ r_cons_flush();
 			r_core_visual_prompt_input (core);
 			break;
 		case 'h':
-			if (cursorMode) {
-				if (cursorPos > 0) {
-					cursorPos--;
+			if (keyboard_visible) {
+				if (keyboard_offset > 0) {
+					keyboard_offset --;
 				}
+				waveFreq = notes_freq (keyboard_offset);
 			} else {
-				r_core_seek_delta (core, -2);
-				r_core_cmd0 (core, "au.");
+				if (cursorMode) {
+					if (cursorPos > 0) {
+						cursorPos--;
+					}
+				} else {
+					r_core_seek_delta (core, -2);
+					r_core_cmd0 (core, "au.");
+				}
 			}
 			break;
 		case 'l':
-			if (cursorMode) {
-				cursorPos++;
+			if (keyboard_visible) {
+				keyboard_offset ++;
+				waveFreq = notes_freq (keyboard_offset);
+				if (!waveFreq) {
+					keyboard_offset --;
+				}
 			} else {
-				r_core_seek_delta (core, 2);
-				r_core_cmd0 (core, "au.");
+				if (cursorMode) {
+					cursorPos++;
+				} else {
+					r_core_seek_delta (core, 2);
+					r_core_cmd0 (core, "au.");
+				}
 			}
 			break;
 		case 'H':
@@ -1023,7 +1070,11 @@ r_cons_flush();
 			r_core_cmd0 (core, "au.");
 			break;
 		case 'q':
-			return false;
+			if (keyboard_visible) {
+				keyboard_visible = false;
+			} else {
+				return false;
+			}
 			break;
 		}
 	}
@@ -1072,11 +1123,13 @@ static int _cmd_au (RCore *core, const char *args) {
 			au_operate (core, args + 1);
 			r_core_block_read (core);
 		} else {
+			eprintf ("Usage: auo[+-*/] [val]\n");
 		}
 		break;
 	case 'p': // "aup"
 		switch (args[1]) {
 		case 'p':
+		case 'i':
 			printPiano (core);
 			break;
 		case '?':
@@ -1094,7 +1147,18 @@ static int _cmd_au (RCore *core, const char *args) {
 			restoreBlocksize();
 		}
 		break;
-	case 'v':
+	case 'f': // "auf"
+		for (int i = 0; i <TONES; i++) {
+			char *note[32], *dolar;
+			strcpy (note, tones[i].note);
+			dolar = strchr (note, '$');
+			if (dolar) {
+				*dolar = '_';
+			}
+			printf ("f tone.%s = %d\n", note, (int)tones[i].freq);
+		}
+		break;
+	case 'v': // "auv"
 		au_visual (core);
 		break;
 	default:
@@ -1103,6 +1167,7 @@ static int _cmd_au (RCore *core, const char *args) {
 		eprintf (" aui - init audio\n");
 		eprintf (" au. - play current block\n");
 		eprintf (" aub - audio blocksize\n");
+		eprintf (" auf - flags per freqs associated with keys\n");
 		eprintf (" aum - mix from given address into current with bsize\n");
 		eprintf (" auo - apply operation with immediate\n");
 		eprintf (" aup - print wave (aupi print piano)\n");
