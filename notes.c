@@ -14,11 +14,11 @@ Tone tones[TONES] = {
 	{ "E0", 20.60 },
 	{ "F0", 21.83 },
 	{ "F0$", 23.12 },
-	{ "GO", 24.50 },
+	{ "G0", 24.50 },
 	{ "G0$", 25.96 },
-	{ "AO", 27.50 },
-	{ "AO$", 29.14 },
-	{ "BO", 30.87 },
+	{ "A0", 27.50 },
+	{ "A0$", 29.14 },
+	{ "B0", 30.87 },
 	{ "C1", 32.70 },
 	{ "C1$", 34.65 },
 	{ "D1", 36.71 },
@@ -106,17 +106,11 @@ Tone tones[TONES] = {
 };
 
 static char tecla(const char *s) {
-	if (s) {
-		return strchr (s, '$')? '|': '_';
-	}
-	return '@';
+	return s? (strchr (s, '$')? '|': '_'): '@';
 }
 
 float notes_freq(int i) {
-	if (i >= 0 && i < TONES) {
-		return tones[i].freq;
-	}
-	return 0;
+	return (i >= 0 && i < TONES) ? tones[i].freq: 0;
 }
 
 
@@ -183,6 +177,9 @@ int print_piano (int off, int nth, int pressed) {
 		} else {
 			pf ("\n");
 		}
+	}
+	if (pressed >= 0) {
+		pf ("Note: %s  Freq: %f\n", tones[off+pressed].note, tones[off+pressed].freq);
 	}
 }
 
