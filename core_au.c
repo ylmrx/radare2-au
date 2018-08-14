@@ -600,11 +600,12 @@ const char *asciiWaveAntiSaw[4] = {
 	"|\\|\\|\\|\\",
 };
 
-extern int print_piano (int off, int nth);
+extern int print_piano (int off, int nth, int pressed);
+static int lastKey = -1;
 
 static bool printPiano(RCore *core) {
 	int w = r_cons_get_size (NULL);
-	print_piano (keyboard_offset, w / 3);
+	print_piano (keyboard_offset, w / 3, lastKey);
 }
 
 static bool printWave(RCore *core) {
@@ -815,7 +816,7 @@ static bool au_visual(RCore *core) {
 		int minus = 64;
 		if (keyboard_visible) {
 			int w = r_cons_get_size (NULL);
-			print_piano (keyboard_offset, w / 3);
+			print_piano (keyboard_offset, w / 3, lastKey);
 			minus = 128;
 		}
 		switch (printMode % 5) {
@@ -865,32 +866,42 @@ static bool au_visual(RCore *core) {
 			break;
 		case '0':
 			au_note_play (core, 0, keyboard_visible);
+			lastKey = 10;
 			break;
 		case '1':
+			lastKey = 1;
 			au_note_play (core, 1, keyboard_visible);
 			break;
 		case '2':
+			lastKey = 2;
 			au_note_play (core, 2, keyboard_visible);
 			break;
 		case '3':
+			lastKey = 3;
 			au_note_play (core, 3, keyboard_visible);
 			break;
 		case '4':
+			lastKey = 4;
 			au_note_play (core, 4, keyboard_visible);
 			break;
 		case '5':
+			lastKey = 5;
 			au_note_play (core, 5, keyboard_visible);
 			break;
 		case '6':
+			lastKey = 6;
 			au_note_play (core, 6, keyboard_visible);
 			break;
 		case '7':
+			lastKey = 7;
 			au_note_play (core, 7, keyboard_visible);
 			break;
 		case '8':
+			lastKey = 8;
 			au_note_play (core, 8, keyboard_visible);
 			break;
 		case '9':
+			lastKey = 9;
 			au_note_play (core, 9, keyboard_visible);
 			break;
 		case '=':
@@ -1001,12 +1012,35 @@ r_cons_flush();
 			}
 			break;
 		case 'H':
-			r_core_seek_delta (core, -toneSize); // zoomMode? -512: -128);
-			r_core_cmd0 (core, "au.");
+			if (keyboard_visible) {
+				if (keyboard_offset > 0) {
+					keyboard_offset -= 6;
+					if (keyboard_offset < 0) {
+						keyboard_offset = 0;
+					}
+				}
+				waveFreq = notes_freq (keyboard_offset);
+			} else {
+				r_core_seek_delta (core, -toneSize); // zoomMode? -512: -128);
+				r_core_cmd0 (core, "au.");
+			}
 			break;
 		case 'L':
-			r_core_seek_delta (core, toneSize); // zoomMode? 512: 128);
-			r_core_cmd0 (core, "au.");
+			if (keyboard_visible) {
+				if (keyboard_offset > 0) {
+					keyboard_offset += 6;
+					while (!notes_freq (keyboard_offset)) {
+						keyboard_offset --;
+						if (keyboard_offset < 0) {
+							break;
+						}
+					}
+				}
+				waveFreq = notes_freq (keyboard_offset);
+			} else {
+				r_core_seek_delta (core, toneSize); // zoomMode? 512: 128);
+				r_core_cmd0 (core, "au.");
+			}
 			break;
 		case 'z':
 			zoomMode = !zoomMode;

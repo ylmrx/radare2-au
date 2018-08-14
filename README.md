@@ -103,9 +103,9 @@ Every instruction will be fixed-sized (oh adored MIPS). A entire instruction wil
 Examples of instruction topology:
 
 | byte 1 | byte 2 | byte 3 | byte 4 |
-| --- | --- | --- | --- | 
-| opcode | oscillator | value | value |
-| opcode | addr | addr | - |
+| ------ | ------ | ------ | ------ | 
+| opcode | oscil. | value  | value  |
+| opcode | addr   | addr   | -      |
 
 ## Block diagram
 
@@ -120,15 +120,15 @@ In a more flexible way of implement this we can simply consider each register a 
 
 ### Oscilator 1
 
-| Reg Núm. | addr | hex | name | d7 | d6 | d5 | d4 | d3 | d2 | d1 | d0
-| ---- | ---- | --- | ---- | --- | --- | --- | --- | --- | --- | --- | --- 
-| 1     | 00000 | 00    | Frequency Low Byte  | f7 | f6 | f5 |  f4| f3 | f2 |f1  | f0 
-| 2     | 00001 | 01    | Frequency High Byte  | f15 | f14 | f13 | f12 | f11 | f10 | f9 | f8 
-| 3     | 00010 | 02    | Pulse Width Low Byte  | pw7 | pw6 | pw5 | pw4 | pw3 | pw2 | pw1 | pw0 
-| 4     | 00011 | 03    | Pulse Width High Nibble / Volume Nibble  | vol03 | vol02 | vol01 | vol00 | pw11 | pw10 | pw9 | pw1 
-| 5     | 00100 | 04    | modes | noise | pulse | sawtooth | triangle | sinus | ring mod. | stop | mute  
-| 6 | 00101 | 05 | attack/decay | atck3 | atck2 | atck1 | atck0 | dec3 | dec2 | dec1 | dec0
-| 7 | 00110 | 06 | sustain/release| sust3 | sust2 | sust1 | sust0 | rel3 | rel2 | rel1 | rel0
+| Reg  | addr  | hex | name                | d7 | d6 | d5 | d4 | d3 | d2 | d1 | d0
+| ---- | ----- | --- | ------------------- | --- | --- | --- | --- | --- | --- | --- | --- 
+| 1    | 00000 | 00  | Frequency Low Byte  | f7 | f6 | f5 |  f4| f3 | f2 |f1  | f0 
+| 2    | 00001 | 01  | Frequency High Byte  | f15 | f14 | f13 | f12 | f11 | f10 | f9 | f8 
+| 3    | 00010 | 02  | Pulse Width Low Byte  | pw7 | pw6 | pw5 | pw4 | pw3 | pw2 | pw1 | pw0 
+| 4    | 00011 | 03  | Pulse Width High Nibble / Volume Nibble  | vol03 | vol02 | vol01 | vol00 | pw11 | pw10 | pw9 | pw1 
+| 5    | 00100 | 04  | modes | noise | pulse | sawtooth | triangle | sinus | ring mod. | stop | mute  
+| 6    | 00101 | 05  | attack/decay | atck3 | atck2 | atck1 | atck0 | dec3 | dec2 | dec1 | dec0
+| 7    | 00110 | 06  | sustain/release| sust3 | sust2 | sust1 | sust0 | rel3 | rel2 | rel1 | rel0
 
 ### Oscilator 2
 
@@ -144,15 +144,15 @@ In a more flexible way of implement this we can simply consider each register a 
 
 ### Oscilator 3
 
-| Reg Núm. | addr | hex | name | d7 | d6 | d5 | d4 | d3 | d2 | d1 | d0
-| ---- | ---- | --- | ---- | --- | --- | --- | --- | --- | --- | --- | --- 
-| 15     | 00000 | 00    | Frequency Low Byte  | f7 | f6 | f5 |  f4| f3 | f2 |f1  | f0 
-| 16     | 00001 | 01    | Frequency High Byte  | f15 | f14 | f13 | f12 | f11 | f10 | f9 | f8 
-| 17     | 00010 | 02    | Pulse Width Low Byte  | pw7 | pw6 | pw5 | pw4 | pw3 | pw2 | pw1 | pw0 
-| 18     | 00011 | 03    | Pulse Width High Nibble / Volume Nibble  | vol03 | vol02 | vol01 | vol00 | pw11 | pw10 | pw9 | pw1 
-| 19     | 00100 | 04    | modes | noise | pulse | sawtooth | triangle | sinus | ring mod. | stop | mute  
-| 20 | 00101 | 05 | attack/decay | atck3 | atck2 | atck1 | atck0 | dec3 | dec2 | dec1 | dec0
-| 21 | 00110 | 06 | sustain/release| sust3 | sust2 | sust1 | sust0 | rel3 | rel2 | rel1 | rel0
+| Reg |  Núm. | addr | hex | name | d7 | d6 | d5 | d4 | d3 | d2 | d1 | d0
+| ----| ----- | ---- | ---- | --- | --- | --- | --- | --- | --- | --- | --- 
+| 15  | 00000 | 00   | Frequency Low Byte  | f7 | f6 | f5 |  f4| f3 | f2 |f1  | f0 
+| 16  | 00001 | 01   | Frequency High Byte  | f15 | f14 | f13 | f12 | f11 | f10 | f9 | f8 
+| 17  | 00010 | 02   | Pulse Width Low Byte  | pw7 | pw6 | pw5 | pw4 | pw3 | pw2 | pw1 | pw0 
+| 18  | 00011 | 03   | Pulse Width High Nibble / Volume Nibble  | vol03 | vol02 | vol01 | vol00 | pw11 | pw10 | pw9 | pw1 
+| 19  | 00100 | 04   | modes | noise | pulse | sawtooth | triangle | sinus | ring mod. | stop | mute  
+| 20  | 00101 | 05   | attack/decay | atck3 | atck2 | atck1 | atck0 | dec3 | dec2 | dec1 | dec0
+| 21  | 00110 | 06   | sustain/release| sust3 | sust2 | sust1 | sust0 | rel3 | rel2 | rel1 | rel0
 
 ### Filter
 
@@ -174,10 +174,6 @@ In a more flexible way of implement this we can simply consider each register a 
 | 30 | - | - | measure low byte | - | - | - | - | - | - | - | - |
 | 31 | - | - | measure high byte / note | - | - | - | - | - | - | - | - |
 | 32 | - | - | general purpose | d7 | d6 | d5 | d4 | d3 | d2 | d1 | d0 |
-
-
-
-
 
 # Run-Time emulation
 

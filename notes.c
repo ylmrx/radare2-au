@@ -123,34 +123,28 @@ float notes_freq(int i) {
 // #define pf printf
 #define pf r_cons_printf
 
-int print_piano (int off, int nth) {
+int print_piano (int off, int nth, int pressed) {
 	int i, y;
 	int och = 0;
 	for (y = 0; y <7; y++) {
-		if (off > 0) {
-			if (y == 0) {
-				pf ("..");
-			}
-		}
 		char t = 0;
 		for (i = off; i < TONES && (i-off < nth); i++) {
 			och = t;
 			t = tecla (tones[i].note);
+
+			bool isPressed = pressed >= 0 ? (i - off == pressed - 1): false;
+			bool isDollar = t != '_';
 			if (y == 0) {
-				if (t == '_') {
-					pf (".--");
-				} else {
-					pf (".-");
-				}
+				pf (isDollar? ".=": ".==");
 			} else if (y == 5) {
-				if (t == '_') {
-					if (off+i==0) {
+				if (isDollar) {
+					pf ("-'");
+				} else {
+					if (off + i==0) {
 						pf ("`--");
 					} else {
 						pf ("---");
 					}
-				} else {
-					pf ("-'");
 				}
 			} else if (y == 6) {
 				if (t == '_') {
@@ -161,11 +155,11 @@ int print_piano (int off, int nth) {
 			} else {
 				if (t == '_') {
 					if (!och || och == '_') {
-						pf (":  ");
+						pf (isPressed?":##":":  ");
 					} else if (och && och == '|' && y < 5) {
-						pf ("  ");
+						pf (isPressed?"##":"  ");
 					} else {
-						pf ("  ");
+						pf (isPressed?"##":"  ");
 					}
 				} else {
 					if (y == 3) {
@@ -173,14 +167,22 @@ int print_piano (int off, int nth) {
 					} else if (y > 3) {
 						pf ("   ");
 					} else {
-						pf ("| |");
+						pf (isPressed?"|#|":"| |");
 					}
 				}
 			}
 	//		pf ("%s", tones[i].note);
 //			pf ("%c", tecla(tones[i].note));
 		}
-		pf ("\n");
+		if (y == 0) {
+			pf (".\n");
+		} else if (y < 5) {
+			pf ("|\n");
+		} else if (y == 5) {
+			pf ("'\n");
+		} else {
+			pf ("\n");
+		}
 	}
 }
 
