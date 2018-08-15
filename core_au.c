@@ -321,10 +321,12 @@ char *sample_new(float freq, int form, int *size) {
 			}
 			break;
 		case FORM_PULSE:
+			sample = (short) max_sample * sin (freq * (2 * M_PI) * i / format.rate);
 			sample = sample > 0? max_sample : -max_sample;
 			break;
 		case FORM_VPULSE:
-			sample = sample > 0x7000? -max_sample : max_sample;
+			sample = (short) max_sample * sin (freq * (2 * M_PI) * i / format.rate);
+			sample = sample > 0x5000? -max_sample : max_sample;
 			break;
 		case FORM_NOISE:
 			sample = (rand() % (int)(max_sample * 2)) - max_sample;
