@@ -650,8 +650,7 @@ static bool printWave(RCore *core) {
 	// TODO: shift with 'h' and 'l'
 	int x , y, h;
 	int i, nwords = core->blocksize / 2;
-	int w = r_cons_get_size (&h) - 10;
-	
+	int w = r_cons_get_size (&h);
 #if 0
 	h = 20;
 
@@ -867,7 +866,7 @@ static bool au_visual_phone(RCore *core) {
 	//	r_cons_visual_flush ();
 		int ch = r_cons_readchar_timeout (500);
 		switch (ch) {
-		case 'h': phone_str [ strlen (phone_str) ] = 0; break;
+		case 'h': if (strlen (phone_str) >0) {phone_str [ strlen (phone_str)-1 ] = 0; } break;
 		case 'l': memmove (phone_str, phone_str + 1, strlen (phone_str)); break;
 		case 127: *phone_str = 0; break;
 		case '1': phone_key (core, "1"); break;
@@ -974,7 +973,7 @@ static bool au_visual(RCore *core) {
 			cursorMode = !cursorMode;
 			break;
 		case '0':
-			au_note_play (core, 0, keyboard_visible);
+			au_note_play (core, 10, keyboard_visible);
 			lastKey = 10;
 			break;
 		case '1':
