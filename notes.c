@@ -181,6 +181,7 @@ int print_piano (int off, int nth, int pressed) {
 	if (pressed >= 0) {
 		pf ("Note: %s  Freq: %f\n", tones[off+pressed].note, tones[off+pressed].freq);
 	}
+	return 0;
 }
 
 #if 0

@@ -1,3 +1,5 @@
+/* radare2-au - MIT - Copyright 2018 - pancake */
+
 #include <r_types.h>
 #include <r_lib.h>
 #include <r_asm.h>
