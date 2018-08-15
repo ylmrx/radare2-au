@@ -420,8 +420,8 @@ static bool au_mix(RCore *core, const char *args) {
 	r_io_read_at (core->io, narg, (ut8*)src, bs);
 	int shorts = core->blocksize / sizeof (*dst);
 	for (int i = 0; i < shorts; i++) {
-		dst[i] = (src[i]/2) + (dst[i]/2);
-		// dst[i] += src[i];
+		st64 sum = src[i] + dst[i];
+		dst[i] = sum / 2;
 	}
 	r_io_write_at (core->io, core->offset, (const ut8*)dst, bs);
 	return true;
@@ -1335,6 +1335,15 @@ static int _cmd_au (RCore *core, const char *args) {
 	case '.': // "au."
 		if (args[1] == '&') {
 			eprintf ("Temporal magic\n");
+		} else if (args[1] == ' ') {
+			int i, rep = r_num_math (core->num, args + 2);
+			r_cons_break_push (NULL, NULL);
+			for (i = 0; i<rep ; i++) {
+				r_cons_is_breaked ();
+				au_play (core);
+				r_sys_usleep (500);
+			}
+			r_cons_break_pop ();
 		} else {
 			captureBlocksize();
 			au_play (core);
