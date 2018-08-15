@@ -271,7 +271,7 @@ char *sample_new(float freq, int form, int *size) {
 			if (form == FORM_INC) {
 				pc = 100 - pc;
 			}
-			pc /= 11 ; // step -- should be parametrizable
+			pc /= freq / 100; // step -- should be parametrizable
 			pc += 1;
 			if (!((int)i % (int)pc)) {
 				sample = max_sample;
