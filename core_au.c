@@ -267,6 +267,15 @@ char *sample_new(float freq, int form, int *size) {
 			break;
 		case FORM_DEC:
 		case FORM_INC:
+			if (form == FORM_INC) {
+				float f = freq * (freq * ((float)i / words));
+				sample = (short) max_sample * sin (f * (2 * M_PI) * i / format.rate);
+			} else {
+				float f = freq  - (freq*  ((float)i / words));
+				//float f = freq * (100 - pc) / 100;
+				sample = (short) max_sample * sin (f * (2 * M_PI) * i / format.rate);
+			}
+#if 0
 			pc = (float)i / (float)format.rate * 100;
 			if (form == FORM_INC) {
 				pc = 100 - pc;
@@ -278,6 +287,7 @@ char *sample_new(float freq, int form, int *size) {
 			} else {
 				sample = -max_sample;
 			}
+#endif
 			break;
 		case FORM_COS:
 			sample = (int)(max_sample * cos (2 * M_PI * freq * ((float)i / format.rate * 2)));
@@ -311,11 +321,13 @@ char *sample_new(float freq, int form, int *size) {
 				if (sample > max_sample / 8) {
 					sample = -sample;
 				}
-				sample *= 1.5;
+				sample *= 1.2;
+#if 0
 				ut64 n = sample;
 				n *= 2;
-				sample = n - ST16_MAX;
-				sample += 200;
+				sample = n - ST16_MAX - 1;
+				sample -= 200;
+#endif
 				// sample *= 2; // interesting ascii art wave
 				// XXX: half wave :?
 			}
@@ -323,6 +335,7 @@ char *sample_new(float freq, int form, int *size) {
 		case FORM_PULSE:
 			sample = (short) max_sample * sin (freq * (2 * M_PI) * i / format.rate);
 			sample = sample > 0? max_sample : -max_sample;
+				sample += (sample * ((float)i / words));  // sounds better?
 			break;
 		case FORM_VPULSE:
 			sample = (short) max_sample * sin (freq * (2 * M_PI) * i / format.rate);
@@ -455,13 +468,18 @@ static bool au_operate(RCore *core, const char *args) {
 	r_io_read_at (core->io, core->offset, (ut8*)dst, bs);
 	switch (*args) {
 	case ')':
+		if (arg >= shorts) {
+eprintf ("Too far.. maxshors is %d not %d\n", shorts, (int)arg);
+		}
 		for (int i = arg; i < shorts; i++) {
 			short val = dst[i - (int)arg] / 2;
 			if (val > 0) {
 				dst[i] += val;
 			} else {
-				dst[i] -= val;
+				//dst[i] -= val;
 			}
+				dst[i] += val;
+//eprintf ("%d +%d\n", dst[i], val);
 		}
 		break;
 	case '=':
