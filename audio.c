@@ -225,7 +225,6 @@ void sample_play(char *buf, int len, int duration) {
 	}
 	if (duration < len) {
 		int pc = (int)((float)len * (float)duration / 100.0);
-printf ("LEN = %d\n", pc);
 		int cropped_size = sample_crop((short*)buf, len, pc);
 		ao_play(device, buf, cropped_size);
 	} else {

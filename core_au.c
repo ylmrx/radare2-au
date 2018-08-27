@@ -366,7 +366,7 @@ static bool au_init(int rate, int bits, int channels, int endian) {
 
 	device = ao_open_live (default_driver, &format, NULL);
 	if (!device) {
-		fprintf (stderr, "core_au: Error opening audio device.\n");
+		eprintf ("core_au: Error opening audio device.\n");
 		return false;
 	}
 	// seems like we need to feed it once to make it work
@@ -408,19 +408,21 @@ static bool au_mix(RCore *core, const char *args) {
 	ut64 narg = *args? r_num_math (core->num, args + 1): 0;
 	float arg = narg;
 	if (arg == 0) {
-		eprintf ("Usage: aum \n");
+		eprintf ("Usage: aum [from] # honors aub blocksize and core->offset\n");
 		return true;
 	}
-	const int bs = core->blocksize;
+	const int bs = aBlocksize; //core->blocksize;
 	// eprintf ("[au] Mixing from 0x%"PFMT64x" to 0x%"PFMT64x"\n", narg, core->offset);
 	short *dst = calloc (bs, 1);
 	short *src = calloc (bs, 1);
 	if (!src || !dst) {
+		free (src);
+		free (dst);
 		return false;
 	}
 	r_io_read_at (core->io, core->offset, (ut8*)dst, bs);
 	r_io_read_at (core->io, narg, (ut8*)src, bs);
-	int shorts = core->blocksize / sizeof (*dst);
+	int shorts = bs / sizeof (*dst);
 	for (int i = 0; i < shorts; i++) {
 		st64 sum = src[i] + dst[i];
 		dst[i] = sum / 2;
@@ -430,26 +432,38 @@ static bool au_mix(RCore *core, const char *args) {
 }
 
 static void auo_help () {
-	eprintf ("Usage: auo[r+-/*_] [value]\n");
+	eprintf ("Usage: auo[r)+-/*_] [value]\n");
+	eprintf (" auo) 300   ; echo with 300 bytes of delay\n");
 	eprintf (" auo+ 300   ; increment 300 each short (nop)\n");
 	eprintf (" auo- 300   ; decrement 300 each short (nop)\n");
 	eprintf (" auo* 2     ; increase the volume\n");
 	eprintf (" auo/ 2     ; decrease the volume\n");
 	eprintf (" auo_       ; audioblock.map(Math.abs)\n");
 	eprintf (" auo-       ; audioblock.map(-Math.abs)\n");
+	eprintf (" auor 2     ; random value with seed\n");
 }
 
 static bool au_operate(RCore *core, const char *args) {
 	ut64 narg = *args? r_num_math (core->num, args + 1): 0;
 	float arg = narg;
 	const int bs = core->blocksize;
-	int shorts = core->blocksize / sizeof (short);
+	int shorts = bs / sizeof (short);
 	short *dst = calloc (bs, 1);
 	if (!dst) {
 		return false;
 	}
 	r_io_read_at (core->io, core->offset, (ut8*)dst, bs);
 	switch (*args) {
+	case ')':
+		for (int i = arg; i < shorts; i++) {
+			short val = dst[i - (int)arg] / 2;
+			if (val > 0) {
+				dst[i] += val;
+			} else {
+				dst[i] -= val;
+			}
+		}
+		break;
 	case '=':
 		for (int i = 0; i< shorts; i++) {
 			dst[i] = arg; //src[i];
@@ -467,13 +481,21 @@ static bool au_operate(RCore *core, const char *args) {
 		break;
 	case '+':
 		for (int i = 0; i< shorts; i++) {
-			dst[i] += arg;
+			if (dst[i] > 0) {
+				dst[i] += arg;
+			} else {
+				dst[i] -= arg;
+			}
 		}
 		break;
 	case '-':
 		if (arg) {
 			for (int i = 0; i< shorts; i++) {
-				dst[i] -= arg;
+				if (dst[i] > 0) {
+					dst[i] -= arg;
+				} else {
+					dst[i] += arg;
+				}
 			}
 		} else {
 			for (int i = 0; i< shorts; i++) {
@@ -857,6 +879,8 @@ static void phone_key(RCore *core, const char *ch) {
 static bool au_visual_phone(RCore *core) {
 	while (1) {
 		r_cons_clear00 ();
+		r_core_cmd0 (core, "aup");
+		r_cons_gotoxy (0, 0);
 		r_cons_printf ("[r2phone:0x%08"PFMT64x"]>\n", core->offset);
 		r_cons_printf ("%s", phone);
 		r_cons_gotoxy (11,8);
@@ -1287,10 +1311,10 @@ static int _cmd_au (RCore *core, const char *args) {
 	case 'm': // "aum"
 		// write pattern here
 		{
-			captureBlocksize();
+			captureBlocksize ();
 			au_mix (core, args + 1);
 			r_core_block_read (core);
-			restoreBlocksize();
+			restoreBlocksize ();
 		}
 		break;
 	case 'w': // "auw"

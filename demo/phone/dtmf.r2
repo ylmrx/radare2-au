@@ -6,7 +6,7 @@ f track1 = abs
 aub abs
 
 # (phone x y,s track0,auws $0,auo-,s track1,auws $1,auo_,s track0,aum track1,au.)
-(phone x y,s track0,auws $0,s track1,auws $1,s track0,aum track1,au.)
+"(phone x y,auws $0@track0,auws $1@track1,s track0,aum track1,au.)"
 (tone x,s track0,auws $0,au.)
 
 # .(tone 697)
