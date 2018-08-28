@@ -472,7 +472,7 @@ static bool au_operate(RCore *core, const char *args) {
 eprintf ("Too far.. maxshors is %d not %d\n", shorts, (int)arg);
 		}
 		for (int i = arg; i < shorts; i++) {
-			short val = dst[i - (int)arg] / 2;
+			short val = dst[i - (int)arg] / 4;
 			if (val > 0) {
 				dst[i] += val;
 			} else {
