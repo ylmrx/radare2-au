@@ -21,9 +21,10 @@ mv core_au.so ~/.config/radare2/plugins
 #undef R_IPI
 #define R_IPI static
 
-#define WAVETYPES 10
+#define WAVETYPES 12
 #define PRINT_MODES 6
-#define WAVECMD "sctpPn-idzZ"
+// #define WAVECMD "sctkpPn-idzZ"
+#define WAVECMD "scktzZpvnsid"
 
 #define WAVERATE 22050
 // #define WAVERATE 44100
@@ -48,17 +49,18 @@ static int auEffect = 0;
 #define restoreBlocksize() r_core_block_size (core, obs)
 
 enum {
-	FORM_SIN,      // .''.''.
-	FORM_COS,      // '..'..'
-	FORM_SAW,      // /|/|/|/
-	FORM_ANTISAW,  // |\|\|\|
-	FORM_PULSE,    // '_'_'_'
-	FORM_VPULSE,   // '__'__'
-	FORM_NOISE,    // \:./|.:
-	FORM_TRIANGLE, // /\/\/\/
-	FORM_SILENCE,  // ______
-	FORM_INC,      // _..--''
-	FORM_DEC,      // ''--.._
+	SHAPE_SIN,      // .''.''.
+	SHAPE_COS,      // '..'..'
+	SHAPE_CROSSES,  // ><><><>
+	SHAPE_TRIANGLE, // /\/\/\/
+	SHAPE_SAW,      // /|/|/|/
+	SHAPE_ANTISAW,  // |\|\|\|
+	SHAPE_PULSE,    // '_'_'_'
+	SHAPE_VPULSE,   // '__'__'
+	SHAPE_NOISE,    // \:./|.:
+	SHAPE_SILENCE,  // ______
+	SHAPE_INC,      // _..--''
+	SHAPE_DEC,      // ''--.._
 };
 
 enum {
@@ -311,12 +313,12 @@ char *sample_new(float freq, int form, int *size) {
 	for (i = 0; i < words; i++) {
 		freq = au_effect (ofreq, i, words);
 		switch (form) {
-		case FORM_SILENCE:
+		case SHAPE_SILENCE:
 			sample = 0;
 			break;
-		case FORM_DEC:
-		case FORM_INC:
-			if (form == FORM_INC) {
+		case SHAPE_DEC:
+		case SHAPE_INC:
+			if (form == SHAPE_INC) {
 				float f = freq * (freq * ((float)i / words));
 				sample = (short) max_sample * sin (f * (2 * M_PI) * i / format.rate);
 			} else {
@@ -326,7 +328,7 @@ char *sample_new(float freq, int form, int *size) {
 			}
 #if 0
 			pc = (float)i / (float)format.rate * 100;
-			if (form == FORM_INC) {
+			if (form == SHAPE_INC) {
 				pc = 100 - pc;
 			}
 			pc /= freq / 100; // step -- should be parametrizable
@@ -338,13 +340,13 @@ char *sample_new(float freq, int form, int *size) {
 			}
 #endif
 			break;
-		case FORM_COS:
-			sample = (int)(max_sample * cos (2 * M_PI * freq * ((float)i / format.rate * 2)));
+		case SHAPE_COS:
+			sample = (int)(max_sample * cos (2 * M_PI * freq * ((float)i / format.rate)));
 			break;
-		case FORM_SIN:
+		case SHAPE_SIN:
 			sample = (short) max_sample * sin (freq * (2 * M_PI) * i / format.rate);
 			break;
-		case FORM_SAW:
+		case SHAPE_SAW:
 			{
 				int rate = 14000 / freq;
 				sample = ((i % rate) * (max_sample * 2) / rate) - max_sample;
@@ -352,7 +354,7 @@ char *sample_new(float freq, int form, int *size) {
 				// printf ("%f\n", (float)sample);
 			}
 			break;
-		case FORM_ANTISAW:
+		case SHAPE_ANTISAW:
 			{
 				int rate = 14000 / freq;
 				sample = ((i % rate) * (max_sample * 2) / rate) - max_sample;
@@ -360,45 +362,56 @@ char *sample_new(float freq, int form, int *size) {
 				// printf ("%f\n", (float)sample);
 			}
 			break;
-		case FORM_TRIANGLE:
+		case SHAPE_CROSSES:
 			{
 				if (freq < 1) {
 					freq = 1;
 				}
-				int rate = (14000 / freq) * 2;
+				int rate = (11050 / freq);
 				sample = ((i % rate) * (max_sample * 2) / rate) - max_sample;
-				if (sample > max_sample / 8) {
+				if (i % 2) {
 					sample = -sample;
 				}
-				sample *= 1.2;
-#if 0
-				ut64 n = sample;
-				n *= 2;
-				sample = n - ST16_MAX - 1;
-				sample -= 200;
-#endif
-				// sample *= 2; // interesting ascii art wave
-				// XXX: half wave :?
 			}
 			break;
-		case FORM_PULSE:
+		case SHAPE_TRIANGLE:
+			{
+				if (freq < 1) {
+					freq = 1;
+				}
+				int rate = (11050 / freq);
+				sample = ((i % rate) * (max_sample * 2) / rate) - max_sample;
+				if (i % 2) {
+					sample = -sample;
+				}
+				if (sample > 0) {
+					sample = -sample;
+				}
+				sample += (32728/3);
+				sample *= 2;
+			}
+			break;
+		case SHAPE_PULSE:
 			sample = (short) max_sample * sin (freq * (2 * M_PI) * i / format.rate);
 			sample = sample > 0? max_sample : -max_sample;
 				sample += (sample * ((float)i / words));  // sounds better?
 			break;
-		case FORM_VPULSE:
+		case SHAPE_VPULSE:
 			sample = (short) max_sample * sin (freq * (2 * M_PI) * i / format.rate);
 			sample = sample > 0x5000? -max_sample : max_sample;
 			break;
-		case FORM_NOISE:
+		case SHAPE_NOISE:
 			sample = (rand() % (int)(max_sample * 2)) - max_sample;
+			sample = (rand() % (int)(32700 * 2)) - 32700;
 			int s = (int)sample * (freq / 1000);
+#if 0
 			if (s > 0) {
 				s = 32700;
 			}
 			if (s < 0) {
 				s = -32700;
 			}
+#endif
 			sample = s;
 			break;
 		}
@@ -459,7 +472,9 @@ static void au_help(RCore *core) {
 		" (z)aw    /|/|/|/\n"
 		" (Z)aw    \\|\\|\\|\\\n"
 		" (p)ulse  |_|'|_|\n"
+		" (v)pulse '__'__'\n"
 		" (n)oise  /:./|.:\n"
+		" (k)ross..  ><><><>\n"
 		" (t)ri..  /\\/\\/\\/\n"
 		" (-)silen _______\n"
 		" (i)nc    _..--''\n"
@@ -642,38 +657,41 @@ static bool au_write(RCore *core, const char *args) {
 	case '?':
 		au_help (core);
 		break;
+	case 'k':
+		sample = sample_new (arg, SHAPE_CROSSES, &size);
+		break;
 	case 's':
-		sample = sample_new (arg, FORM_SIN, &size);
+		sample = sample_new (arg, SHAPE_SIN, &size);
 		break;
 	case 't':
-		sample = sample_new (arg, FORM_TRIANGLE, &size);
+		sample = sample_new (arg, SHAPE_TRIANGLE, &size);
 		break;
 	case 'i':
-		sample = sample_new (arg, FORM_INC, &size);
+		sample = sample_new (arg, SHAPE_INC, &size);
 		break;
 	case 'd':
-		sample = sample_new (arg, FORM_DEC, &size);
+		sample = sample_new (arg, SHAPE_DEC, &size);
 		break;
 	case 'c':
-		sample = sample_new (arg, FORM_COS, &size);
+		sample = sample_new (arg, SHAPE_COS, &size);
 		break;
 	case 'p':
-		sample = sample_new (arg, FORM_PULSE, &size);
+		sample = sample_new (arg, SHAPE_PULSE, &size);
 		break;
-	case 'P':
-		sample = sample_new (arg, FORM_VPULSE, &size);
+	case 'v':
+		sample = sample_new (arg, SHAPE_VPULSE, &size);
 		break;
 	case 'n':
-		sample = sample_new (arg, FORM_NOISE, &size);
+		sample = sample_new (arg, SHAPE_NOISE, &size);
 		break;
 	case 'z':
-		sample = sample_new (arg, FORM_SAW, &size);
+		sample = sample_new (arg, SHAPE_SAW, &size);
 		break;
 	case 'Z':
-		sample = sample_new (arg, FORM_ANTISAW, &size);
+		sample = sample_new (arg, SHAPE_ANTISAW, &size);
 		break;
 	case '-':
-		sample = sample_new (arg, FORM_SILENCE, &size);
+		sample = sample_new (arg, SHAPE_SILENCE, &size);
 		break;
 	}
 	if (size > 0) {
@@ -709,6 +727,13 @@ const char *asciiWaveTriangle[4] = {
 	"\\/\\/\\/\\/",
 };
 
+const char *asciiWaveCrosses[4] = {
+	"><><><><",
+	"<><><><>",
+	"><><><><",
+	"<><><><>",
+};
+
 const char *asciiWavePulse[4] = {
 	"_|'|_|'|",
 	"|'|_|'|_",
@@ -739,9 +764,9 @@ const char *asciiWaveSilence[4] = {
 
 const char *asciiWaveIncrement[4] = {
 	"_..---''",
-	"_..---''",
-	"_..---''",
-	"_..---''",
+	".__---''",
+	"...===''",
+	"_..---\"\"",
 };
 
 const char *asciiWaveDecrement[4] = {
@@ -814,7 +839,7 @@ static bool printWave(RCore *core, int oy) {
 		if (cursorMode && x == cursorPos + 2) {
 			r_cons_gotoxy (x - 1, y + 3 + oy);
 			r_cons_printf ("[#]");
-			oy = y;
+//			oy = y;
 		} else if (cursorMode && x == cursorPos + 3 && y == oy) {
 			// do nothing
 		} else {
@@ -831,17 +856,18 @@ static bool printWave(RCore *core, int oy) {
 static const char *asciin(int waveType) {
 	int mod = waveType % WAVETYPES;
 	switch (mod) {
-	case 0: return "sinus";
-	case 1: return "cos..";
-	case 2: return "tri..";
-	case 3: return "pulse";
-	case 4: return "vpuls";
-	case 5: return "noise";
-	case 6: return "silen";
-	case 7: return "incrm";
-	case 8: return "decrm";
-	case 9: return "saw..";
-	case 10: return "ansaw";
+	case SHAPE_SIN: return "sinus";
+	case SHAPE_COS: return "cos..";
+	case SHAPE_CROSSES: return "cross";
+	case SHAPE_TRIANGLE: return "tri..";
+	case SHAPE_PULSE: return "pulse";
+	case SHAPE_VPULSE: return "vpuls";
+	case SHAPE_NOISE: return "noise";
+	case SHAPE_SILENCE: return "silen";
+	case SHAPE_INC: return "incrm";
+	case SHAPE_DEC: return "decrm";
+	case SHAPE_SAW: return "saw..";
+	case SHAPE_ANTISAW: return "ansaw";
 	}
 	return NULL;
 }
@@ -850,17 +876,18 @@ static const char *asciis(int i) {
 	int mod = waveType % WAVETYPES;
 	i %= 4;
 	switch (mod) {
-	case 0: return asciiWaveSin[i];
-	case 1: return asciiWaveCos[i];
-	case 2: return asciiWaveTriangle[i];
-	case 3: return asciiWavePulse[i];
-	case 4: return asciiWaveVPulse[i];
-	case 5: return asciiWaveNoise[i];
-	case 6: return asciiWaveSilence[i];
-	case 7: return asciiWaveIncrement[i];
-	case 8: return asciiWaveDecrement[i];
-	case 9: return asciiWaveSaw[i];
-	case 10: return asciiWaveAntiSaw[i];
+	case SHAPE_SIN: return asciiWaveSin[i];
+	case SHAPE_COS: return asciiWaveCos[i];
+	case SHAPE_CROSSES: return asciiWaveCrosses[i];
+	case SHAPE_TRIANGLE: return asciiWaveTriangle[i];
+	case SHAPE_PULSE: return asciiWavePulse[i];
+	case SHAPE_VPULSE: return asciiWaveVPulse[i];
+	case SHAPE_NOISE: return asciiWaveNoise[i];
+	case SHAPE_SILENCE: return asciiWaveSilence[i];
+	case SHAPE_INC: return asciiWaveIncrement[i];
+	case SHAPE_DEC: return asciiWaveDecrement[i];
+	case SHAPE_SAW: return asciiWaveSaw[i];
+	case SHAPE_ANTISAW: return asciiWaveAntiSaw[i];
 	}
 	return NULL;
 }
@@ -868,8 +895,10 @@ static const char *asciis(int i) {
 const char **aiis[WAVETYPES] = {
 	asciiWaveSin,
 	asciiWaveCos,
+	asciiWaveCrosses,
 	asciiWaveTriangle,
 	asciiWavePulse,
+	asciiWaveVPulse,
 	asciiWaveNoise,
 	asciiWaveSilence,
 	asciiWaveIncrement,
@@ -1330,7 +1359,7 @@ r_cons_flush();
 			break;
 		case 'j':
 			if (cursorMode) {
-				editCycle(core, 0x1000);
+				editCycle (core, 0x1000);
 			} else {
 				waveType++;
 				playNote (core);
