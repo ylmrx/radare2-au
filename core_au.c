@@ -42,6 +42,7 @@ static int cursorPos = 0;
 static int animateMode = 0;
 static int aBlocksize = 1024*8;
 static int keyboard_offset = 0;
+static int auEffect = 0;
 
 #define captureBlocksize() int obs = core->blocksize; r_core_block_size(core, aBlocksize)
 #define restoreBlocksize() r_core_block_size (core, obs)
@@ -76,9 +77,24 @@ enum {
 	FILTER_SCALE,     // *=
 };
 
+// aue[type] [arg]
+enum {
+	EFFECT_NONE,
+	EFFECT_ARPEGGIO, // blirping
+	EFFECT_PERCENT,
+	EFFECT_LAST
+};
+
 static short sample;
 static ao_device *device = NULL;
 static ao_sample_format format = {0};
+
+static void playNote(RCore *core) {
+	char waveTypeChar = WAVECMD[waveType % WAVETYPES];
+	waveTypeChar = WAVECMD[waveType % WAVETYPES];
+	r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
+	r_core_cmd0 (core, "au.");
+}
 
 void sample_filter(char *buf, int size, int filter, int value) {
 	int i, j;
@@ -233,6 +249,42 @@ void sample_filter(char *buf, int size, int filter, int value) {
 	}
 }
 
+static int *chords = NULL;
+static int nchords = 0;
+
+float arpeggio (float ofreq, int i, int words) {
+	int pc = (i * 100) / words;
+	if (chords) {
+		int block = 100 / nchords;
+		int piece = pc / block;
+		return ofreq + chords[piece];
+	}
+	if (pc > 80) {
+		return ofreq + 300;
+	}
+	if (pc > 60) {
+		return ofreq + 400;
+	}
+	if (pc > 40) {
+		return ofreq + 200;
+	}
+	if (pc > 25) {
+		return ofreq + 50;
+	}
+	return ofreq;
+}
+
+float au_effect (float ofreq, int i, int words) {
+	int pc = (i * 100) / words;
+	switch (auEffect) {
+	case EFFECT_PERCENT:
+		return ofreq * pc / 100; // engine-like sound
+	case EFFECT_ARPEGGIO:
+		return arpeggio (ofreq, i, words);
+	}
+	return ofreq;
+}
+
 char *sample_new(float freq, int form, int *size) {
 	int i;
 	short sample; // float ?
@@ -242,6 +294,8 @@ char *sample_new(float freq, int form, int *size) {
 	float pc;
 	// int buf_size = format.bits / 8 * format.channels * format.rate;
 	int buf_size = 16 / 8 * format.channels * format.rate;
+	buf_size = aBlocksize;
+
 	char *buffer = calloc (buf_size, sizeof (char));
 	if (!buffer) {
 		return NULL;
@@ -253,14 +307,9 @@ char *sample_new(float freq, int form, int *size) {
 	}
 	short *word = (short*)(buffer);
 	int words = buf_size / sizeof (short);
+	float ofreq = freq;
 	for (i = 0; i < words; i++) {
-		// sample = (char)(max_sample * sin(2 * M_PI * freq * ((float)i / format.rate * 2)));
-//		sample = (char)(max_sample * sin(i * (freq / format.rate))); // 2 * M_PI * freq * ((float)i / format.rate * 2)));
-		// sample = (short) max_sample * sin (freq * (2 * M_PI) * i / format.rate);
-// eprintf ("%d ", sample);
-
-  // buffer[i] = sin(1000 * (2 * pi) * i / 44100);
-
+		freq = au_effect (ofreq, i, words);
 		switch (form) {
 		case FORM_SILENCE:
 			sample = 0;
@@ -363,6 +412,7 @@ char *sample_new(float freq, int form, int *size) {
 		// i++;
 	}
 	// sample_filter (buffer, buf_size, FILTER_SIGN, 1);
+eprintf("\n");
 	return buffer;
 }
 
@@ -490,8 +540,8 @@ static bool au_anal(RCore *core, const char *args) {
 		}
 	}
 	if (end) {
-		eprintf ("cycle length %d\n", (i*10));
-		eprintf ("frequency %d\n", 1000 - (i*10));
+		r_cons_printf ("cycle length %d\n", (i*10));
+		r_cons_printf ("frequency %d\n", 1000 - (i*10));
 	}
 	return true;
 }
@@ -878,6 +928,7 @@ static bool au_visual_help(RCore *core) {
 	r_cons_printf (" +- -> increment/decrement the frequency\n");
 	r_cons_printf (" pP -> rotate print modes\n");
 	r_cons_printf (" .  -> play current block\n");
+	r_cons_printf (" e  -> effect (arpeggio, percent, ...)\n");
 	r_cons_printf (" i  -> insert current note in current offset\n");
 	r_cons_printf (" :  -> type r2 command\n");
 
@@ -925,13 +976,29 @@ static const char *phone =
 "	|      _      |\n"
 "	`-------------'\n";
 
-static char phone_str[16] ={0};
+static char phone_str[16] = {0};
 static void phone_key(RCore *core, const char *ch) {
 	strcat (phone_str, ch);
 	if (strlen (phone_str) > 9) {
 		memmove (phone_str, phone_str + 1, strlen (phone_str)+ 1);
 	}
 	r_core_cmdf (core, ".(%s)", ch);
+}
+
+static void au_setchords(RCore *core, const char *input) {
+	char *dinput = strdup (input);
+	RList *args = r_str_split_list (dinput, " ");
+	RListIter *iter;
+	char *arg;
+	nchords = r_list_length (args);
+	int i = 0;
+	free (chords);
+	chords = calloc (sizeof (int), nchords);
+	r_list_foreach (args, iter, arg) {
+		chords[i++] = (int)r_num_math (core->num, arg);
+	}
+	r_list_free (args);
+	free (dinput);
 }
 
 static bool au_visual_phone(RCore *core) {
@@ -941,7 +1008,7 @@ static bool au_visual_phone(RCore *core) {
 		r_cons_gotoxy (0, 0);
 		r_cons_printf ("[r2phone:0x%08"PFMT64x"]>\n", core->offset);
 		r_cons_printf ("%s", phone);
-		r_cons_gotoxy (11,8);
+		r_cons_gotoxy (11, 8);
 		r_cons_printf ("%10s", phone_str);
 		r_cons_gotoxy (11 + 9, 8);
 		r_cons_flush ();
@@ -1264,10 +1331,15 @@ r_cons_flush();
 				editCycle(core, 0x1000);
 			} else {
 				waveType++;
-				waveTypeChar = WAVECMD[waveType % WAVETYPES];
-				r_core_cmdf (core, "auw%c %d", waveTypeChar, waveFreq);
-				r_core_cmd0 (core, "au.");
+				playNote (core);
 			}
+			break;
+		case 'e':
+			auEffect ++;
+			if (auEffect >= EFFECT_LAST) {
+				auEffect = 0;
+			}
+			playNote (core);
 			break;
 		case '?':
 			au_visual_help (core);
@@ -1436,6 +1508,25 @@ static int _cmd_au (RCore *core, const char *args) {
 			restoreBlocksize();
 		}
 		break;
+	case 'E': // "auE"
+		au_setchords (core, r_str_trim_ro (args + 1));
+		break;
+	case 'e': // "aue"
+		switch (args[1]) {
+		case 'p':
+			auEffect = EFFECT_PERCENT;
+			break;
+		case 'a':
+			auEffect = EFFECT_ARPEGGIO;
+			break;
+		case 0:
+			auEffect = EFFECT_NONE;
+			break;
+		default:
+			eprintf ("Usage: auep -> percent effect, auea -> arpeggio effect\n");
+			break;
+		}
+		break;
 	case 'f': // "auf"
 		for (int i = 0; i <TONES; i++) {
 			char note[32], *dolar;
@@ -1457,6 +1548,8 @@ static int _cmd_au (RCore *core, const char *args) {
 		eprintf (" aua - analyze wave in current block\n");
 		eprintf (" aub - audio blocksize\n");
 		eprintf (" auf - flags per freqs associated with keys\n");
+		eprintf (" aue - audio effects (arpeggio, percent, ..)\n");
+		eprintf (" auE [arpeggio] - arpeggio chords to use\n");
 		eprintf (" aui - init audio\n");
 		eprintf (" aum - mix from given address into current with bsize\n");
 		eprintf (" auo - apply operation with immediate\n");
