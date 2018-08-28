@@ -145,8 +145,7 @@ void sample_filter(char *buf, int size, int filter, int value) {
 			pc += 1;
 			if (!((int)i % (int)pc)) {
 				ibuf[i] = 0xffff / 2;
-			}
-			else {
+			} else {
 				//	sample = -max_sample;
 			}
 		}
@@ -274,6 +273,7 @@ float arpeggio (float ofreq, int i, int words) {
 	return ofreq;
 }
 
+// affects frequency over time
 float au_effect (float ofreq, int i, int words) {
 	int pc = (i * 100) / words;
 	switch (auEffect) {
@@ -393,10 +393,10 @@ char *sample_new(float freq, int form, int *size) {
 		case FORM_NOISE:
 			sample = (rand() % (int)(max_sample * 2)) - max_sample;
 			int s = (int)sample * (freq / 1000);
-			if (s > 32766) {
+			if (s > 0) {
 				s = 32700;
 			}
-			if (s < -32766) {
+			if (s < 0) {
 				s = -32700;
 			}
 			sample = s;
@@ -774,7 +774,7 @@ static bool printPiano(RCore *core) {
 	return true;
 }
 
-static bool printWave(RCore *core) {
+static bool printWave(RCore *core, int oy) {
 	short sample = 0;
 	short *words = (short*)core->block;
 	// TODO: shift with 'h' and 'l'
@@ -797,11 +797,10 @@ static bool printWave(RCore *core) {
 	int step = zoomMode? 2: 1;
 	if (cursorMode) {
 		for (i = 0; i<h; i++) {
-			r_cons_gotoxy (cursorPos + 2, i);
+			r_cons_gotoxy (cursorPos + 2, i + oy);
 			r_cons_printf ("|");
 		}
 	}
-	int oy = 0;
 	step *= zoomLevel;
 	for (i = j = 0; i < nwords; i += step, j++) {
 		int x = j + 2;
@@ -813,18 +812,18 @@ static bool printWave(RCore *core) {
 			break;
 		}
 		if (cursorMode && x == cursorPos + 2) {
-			r_cons_gotoxy (x - 1, y + 3);
+			r_cons_gotoxy (x - 1, y + 3 + oy);
 			r_cons_printf ("[#]");
 			oy = y;
 		} else if (cursorMode && x == cursorPos + 3 && y == oy) {
 			// do nothing
 		} else {
-			r_cons_gotoxy (x, y + 3);
+			r_cons_gotoxy (x, y + 3 + oy);
 			r_cons_printf (Color_MAGENTA"*"Color_RESET);
 		}
 		// r_cons_printf ("%d %d - ", x, y);
 	}
-	r_cons_gotoxy (0, h - 4);
+	r_cons_gotoxy (0, h - 4 + oy);
 #endif
 	return true;
 }
@@ -1065,19 +1064,22 @@ static bool au_visual(RCore *core) {
 		}
 		r_cons_printf ("[r2:auv] [0x%08"PFMT64x"] [%04x] %s %s freq %d block %d cursor %d cycle %d zoom %d\n",
 			core->offset, tdiff, wave, waveName, waveFreq, toneSize, cursorPos, cycleSize, zoomLevel);
-		int minus = 64;
+		int oy, minus = 64;
 		if (keyboard_visible) {
 			int w = r_cons_get_size (NULL);
 			print_piano (keyboard_offset, w / 3, lastKey);
 			minus = 128;
+			oy = 10;
+		} else {
+			oy = 0;
 		}
 		switch (printMode % PRINT_MODES) {
 		case 0:
-			printWave (core);
+			printWave (core, oy);
 			break;
 		case 1:
 			r_core_cmdf (core, "pze ($r*16)-(%d * 5)", minus);
-			printWave (core);
+			printWave (core, oy);
 			break;
 		case 2:
 		//	r_cons_gotoxy (0, 2);
@@ -1086,7 +1088,7 @@ static bool au_visual(RCore *core) {
 		case 3:
 		//	r_cons_gotoxy (0, 2);
 			r_core_cmdf (core, "pxd2 ($r*16)-(%d*3)", minus);
-			printWave (core);
+			printWave (core, oy);
 			break;
 		case 4:
 		//	r_cons_gotoxy (0, 2);
@@ -1486,7 +1488,7 @@ static int _cmd_au (RCore *core, const char *args) {
 			eprintf ("Usage: aup[p] arg\n");
 			break;
 		default:
-			printWave (core);
+			printWave (core, 0);
 			break;
 		}
 		break;
