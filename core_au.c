@@ -426,7 +426,6 @@ char *sample_new(float freq, int form, int *size) {
 		// i++;
 	}
 	// sample_filter (buffer, buf_size, FILTER_SIGN, 1);
-eprintf("\n");
 	return buffer;
 }
 
@@ -466,6 +465,8 @@ static bool au_fini() {
 static void au_help(RCore *core) {
 	eprintf ("Usage: auw[type] [args]\n");
 	eprintf (" fill current block with wave\n");
+	eprintf (" default wave shape type can be changed like this:\n");
+	eprintf (" > 'auws;auw 400' is the same as > 'auws 400'\n");
 	eprintf (" args: frequence\n");
 	eprintf (" types:\n"
 		" (s)in    .''.''.\n"
@@ -575,7 +576,7 @@ static bool au_operate(RCore *core, const char *args) {
 	switch (*args) {
 	case ')':
 		if (arg >= shorts) {
-eprintf ("Too far.. maxshors is %d not %d\n", shorts, (int)arg);
+			eprintf ("Too far.. maxshors is %d not %d\n", shorts, (int)arg);
 		}
 		for (int i = arg; i < shorts; i++) {
 			short val = dst[i - (int)arg] / 4;
@@ -584,7 +585,7 @@ eprintf ("Too far.. maxshors is %d not %d\n", shorts, (int)arg);
 			} else {
 				//dst[i] -= val;
 			}
-				dst[i] += val;
+			dst[i] += val;
 //eprintf ("%d +%d\n", dst[i], val);
 		}
 		break;
@@ -645,16 +646,25 @@ eprintf ("Too far.. maxshors is %d not %d\n", shorts, (int)arg);
 	return true;
 }
 
+static char defaultShape = 0;
+
 static bool au_write(RCore *core, const char *args) {
 	int size = 0;
 	char *sample = NULL;
 	ut64 narg = *args? r_num_math (core->num, args + 1): 0;
 	float arg = narg;
 	if (arg == 0) {
-		au_help (core);
+		if (*args) {
+			defaultShape = *args;
+		} else {
+			r_cons_printf ("auw%c\n", defaultShape);
+		}
 		return true;
 	}
 	switch (*args) {
+	case ' ':
+		au_write (core, sdb_fmt ("%c %s", defaultShape, args + 1));
+		break;
 	case '?':
 		au_help (core);
 		break;
@@ -991,22 +1001,22 @@ static void editCycle (RCore *core, int step) {
 }
 
 static const char *phone =
-"           _\n"
-"	.-'-'---------.\n"
-"	|     ==·     |\n"
-"	|.-----------.|\n"
-"	|| dtmf:     ||\n"
-"	||           ||\n"
-"	|| _________ ||\n"
-"	|`-----------'|\n"
-"	| [  (   ). ] |\n"
-"	| .________   |\n"
-"	| |[1][2][3]  |\n"
-"	| |[4][5][6]  |\n"
-"	| |[7][8][9]  |\n"
-"	| |[*][0][#]  |\n"
-"	|      _      |\n"
-"	`-------------'\n";
+"      _\n"
+"  .-'-'---------.\n"
+"  |     ==·     |\n"
+"  |.-----------.|\n"
+"  || dtmf:     ||\n"
+"  ||           ||\n"
+"  || _________ ||\n"
+"  |`-----------'|\n"
+"  | [  (   ). ] |\n"
+"  | .________   |\n"
+"  | |[1][2][3]  |\n"
+"  | |[4][5][6]  |\n"
+"  | |[7][8][9]  |\n"
+"  | |[*][0][#]  |\n"
+"  |      _      |\n"
+"  `-------------'\n";
 
 static char phone_str[16] = {0};
 static void phone_key(RCore *core, const char *ch) {
@@ -1040,9 +1050,13 @@ static bool au_visual_phone(RCore *core) {
 		r_cons_gotoxy (0, 0);
 		r_cons_printf ("[r2phone:0x%08"PFMT64x"]>\n", core->offset);
 		r_cons_printf ("%s", phone);
-		r_cons_gotoxy (11, 8);
+		r_cons_gotoxy (5, 8);
 		r_cons_printf ("%10s", phone_str);
-		r_cons_gotoxy (11 + 9, 8);
+		if (*phone_str) {
+			r_cons_gotoxy (6 + 9, 8);
+		} else {
+			r_cons_gotoxy (5 + 9, 8);
+		}
 		r_cons_flush ();
 	//	r_cons_visual_flush ();
 		int ch = r_cons_readchar_timeout (500);
@@ -1304,7 +1318,8 @@ static bool au_visual(RCore *core) {
 				waveFreq = notes_freq (keyboard_offset);
 				au_note_play (core, 1, keyboard_visible);
 			} else {
-				r_core_seek_delta (core, -toneSize); // zoomMode? -512: -128);
+				// r_core_seek_delta (core, -toneSize); // zoomMode? -512: -128);
+				r_core_cmd0 (core, "s--");
 				r_core_cmd0 (core, "au.");
 			}
 			break;
@@ -1320,7 +1335,8 @@ static bool au_visual(RCore *core) {
 				waveFreq = notes_freq (keyboard_offset);
 				au_note_play (core, 1, keyboard_visible);
 			} else {
-				r_core_seek_delta (core, toneSize); // zoomMode? 512: 128);
+				// r_core_seek_delta (core, toneSize); // zoomMode? 512: 128);
+				r_core_cmd0 (core, "s++");
 				r_core_cmd0 (core, "au.");
 			}
 			break;
@@ -1529,14 +1545,21 @@ static int _cmd_au (RCore *core, const char *args) {
 		}
 		break;
 	case 'f': // "auf"
-		for (int i = 0; i <TONES; i++) {
-			char note[32], *dolar;
-			strcpy (note, tones[i].note);
-			dolar = strchr (note, '$');
-			if (dolar) {
-				*dolar = '_';
+		if (args[1] == ' ') {
+			int idx = r_num_math (core->num, args + 1);
+			if (idx >= 0 && idx < TONES) {
+				r_cons_printf ("%d\n", (int)tones[idx].freq);
 			}
-			printf ("f tone.%s = %d\n", note, (int)tones[i].freq);
+		} else {
+			for (int i = 0; i < TONES; i++) {
+				char note[32], *dolar;
+				strcpy (note, tones[i].note);
+				dolar = strchr (note, '$');
+				if (dolar) {
+					*dolar = '_';
+				}
+				r_cons_printf ("f tone.%s = %d # %d\n", note, (int)tones[i].freq, i);
+			}
 		}
 		break;
 	case 'v': // "auv"
@@ -1544,7 +1567,7 @@ static int _cmd_au (RCore *core, const char *args) {
 		break;
 	default:
 	case '?':
-		eprintf ("Usage: au[imopPwv] [args]\n");
+		eprintf ("Usage: au[.abfeEimopvw] [args]\n");
 		eprintf (" au. - play current block (au.& in bg)\n");
 		eprintf (" aua - analyze wave in current block\n");
 		eprintf (" aub - audio blocksize\n");
