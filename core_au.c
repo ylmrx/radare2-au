@@ -456,10 +456,50 @@ static void auo_help () {
 	eprintf (" auor 2     ; random value with seed\n");
 }
 
+static bool au_anal(RCore *core, const char *args) {
+	ut64 narg = *args? r_num_math (core->num, args + 1): 0;
+	float arg = narg;
+	const int bs = aBlocksize;
+	int i, shorts = bs / sizeof (short);
+	short *dst = calloc (bs, 1);
+	if (!dst) {
+		return false;
+	}
+	r_io_read_at (core->io, core->offset, (ut8*)dst, bs);
+	short init = dst[0];
+	// XXX not working well
+	int direction = (dst[1] > init)? 1: -1;
+	bool end = false;
+	for (i=2; i<shorts; i++) {
+		if (direction > 0) {
+			if (dst[i] <= init) {
+				if (end) {
+					break;
+				}
+				direction = -1;
+				end=true;
+			}
+		} else {
+			if (dst[i] >= init) {
+				if (end) {
+					break;
+				}
+				direction = 1;
+				end=true;
+			}
+		}
+	}
+	if (end) {
+		eprintf ("cycle length %d\n", (i*10));
+		eprintf ("frequency %d\n", 1000 - (i*10));
+	}
+	return true;
+}
+
 static bool au_operate(RCore *core, const char *args) {
 	ut64 narg = *args? r_num_math (core->num, args + 1): 0;
 	float arg = narg;
-	const int bs = core->blocksize;
+	const int bs = aBlocksize;
 	int shorts = bs / sizeof (short);
 	short *dst = calloc (bs, 1);
 	if (!dst) {
@@ -1361,6 +1401,9 @@ static int _cmd_au (RCore *core, const char *args) {
 			eprintf ("Usage: auo[+-*/] [val]\n");
 		}
 		break;
+	case 'a': // "aua"
+		au_anal (core, args + 1);
+		break;
 	case 'p': // "aup"
 		switch (args[1]) {
 		case 'p':
@@ -1410,15 +1453,16 @@ static int _cmd_au (RCore *core, const char *args) {
 	default:
 	case '?':
 		eprintf ("Usage: au[imopPwv] [args]\n");
-		eprintf (" aui - init audio\n");
 		eprintf (" au. - play current block (au.& in bg)\n");
+		eprintf (" aua - analyze wave in current block\n");
 		eprintf (" aub - audio blocksize\n");
 		eprintf (" auf - flags per freqs associated with keys\n");
+		eprintf (" aui - init audio\n");
 		eprintf (" aum - mix from given address into current with bsize\n");
 		eprintf (" auo - apply operation with immediate\n");
 		eprintf (" aup - print wave (aupi print piano)\n");
-		eprintf (" auw - write wave (see auw?)\n");
 		eprintf (" auv - visual wave mode\n");
+		eprintf (" auw - write wave (see auw?)\n");
 		break;
 	}
 	return false;
