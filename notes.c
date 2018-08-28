@@ -27,9 +27,9 @@ Tone tones[TONES] = {
 	{ "F1", 43.65 },
 	{ "F1$", 46.25 },
 	{ "G1", 49.00 },
-	{ "G1$", 49.00 },
+	{ "G1$", 51.90 },
 	{ "A1", 55.00 },
-	{ "A1$", 55.00 },
+	{ "A1$", 58.30 },
 	{ "B1", 61.74 },
 	{ "C2", 65.41 },
 	{ "C2$", 69.30 },
@@ -113,6 +113,22 @@ float notes_freq(int i) {
 	return (i >= 0 && i < TONES) ? tones[i].freq: 0;
 }
 
+int notes_index(int i, bool black, int from) {
+	int j;
+	int n = 0;
+	int type = black? 0: '$';
+	i--;
+	for (j = from; j < TONES; j++) {
+		if (tones[j].note[2] == type) {
+			continue;
+		}
+		if (i == n) {
+			return j - from;
+		}
+		n++;
+	}
+	return 0;
+}
 
 // #define pf printf
 #define pf r_cons_printf
