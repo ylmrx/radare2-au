@@ -113,17 +113,16 @@ float notes_freq(int i) {
 	return (i >= 0 && i < TONES) ? tones[i].freq: 0;
 }
 
-int notes_index(int i, bool black, int from) {
+int notes_index(int i, int black, int from) {
 	int j;
 	int n = 0;
 	int type = black? 0: '$';
-	i--;
 	for (j = from; j < TONES; j++) {
-		if (tones[j].note[2] == type) {
+		if ((black != -1) && tones[j].note[2] == type) {
 			continue;
 		}
 		if (i == n) {
-			return j - from;
+			return j;
 		}
 		n++;
 	}

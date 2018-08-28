@@ -36,6 +36,7 @@ static int waveFreq = 500;
 static int cycleSize = 220;
 static int toneSize = 4096; // 0x1000
 static int printMode = 0;
+static int auPianoKeys = -1; // XXX not working well yet
 static bool zoomMode = false;
 static int zoomLevel = 1;
 static bool cursorMode = false;
@@ -403,7 +404,7 @@ char *sample_new(float freq, int form, int *size) {
 		case SHAPE_NOISE:
 			sample = (rand() % (int)(max_sample * 2)) - max_sample;
 			sample = (rand() % (int)(32700 * 2)) - 32700;
-			int s = (int)sample * (freq / 1000);
+			int s = (int)sample * (freq / 100);
 #if 0
 			if (s > 0) {
 				s = 32700;
@@ -770,9 +771,9 @@ const char *asciiWaveIncrement[4] = {
 };
 
 const char *asciiWaveDecrement[4] = {
-	"''---.._",
-	"''---.._",
-	"''---.._",
+	"\"\"---.._",
+	"''===.._",
+	"''---__.",
 	"''---.._",
 };
 
@@ -792,6 +793,7 @@ const char *asciiWaveAntiSaw[4] = {
 
 extern int print_piano (int off, int nth, int pressed);
 static int lastKey = -1;
+static int lastKeyReal = -1;
 
 static bool printPiano(RCore *core) {
 	int w = r_cons_get_size (NULL);
@@ -917,7 +919,7 @@ typedef struct note_t {
 static AUNote notes[10];
 
 static void au_note_playtone(RCore *core, int note) {
-	int idx = keyboard_offset + note;
+	int idx = notes_index (note, auPianoKeys, keyboard_offset);
 	// waveType = notes[note].type;
 	float toneFreq = notes_freq (idx);
 	char waveTypeChar = WAVECMD[waveType % WAVETYPES];
@@ -928,6 +930,8 @@ static void au_note_playtone(RCore *core, int note) {
 
 static void au_note_play(RCore *core, int note, bool keyboard_visible) {
 	if (keyboard_visible) {
+		lastKey = note;
+		lastKeyReal = notes_index (note, auPianoKeys, keyboard_offset) - keyboard_offset;
 		au_note_playtone (core, note);
 		return;
 	}
@@ -1096,7 +1100,7 @@ static bool au_visual(RCore *core) {
 		int oy, minus = 64;
 		if (keyboard_visible) {
 			int w = r_cons_get_size (NULL);
-			print_piano (keyboard_offset, w / 3, lastKey);
+			print_piano (keyboard_offset, w / 3, lastKeyReal);
 			minus = 128;
 			oy = 10;
 		} else {
@@ -1152,56 +1156,22 @@ static bool au_visual(RCore *core) {
 		case 'c':
 			cursorMode = !cursorMode;
 			break;
-		case '0':
-			au_note_play (core, 10, keyboard_visible);
-			lastKey = 10;
-			break;
-		case '1':
-			lastKey = 1;
-			au_note_play (core, 1, keyboard_visible);
-			break;
-		case '2':
-			lastKey = 2;
-			au_note_play (core, 2, keyboard_visible);
-			break;
-		case '3':
-			lastKey = 3;
-			au_note_play (core, 3, keyboard_visible);
-			break;
-		case '4':
-			lastKey = 4;
-			au_note_play (core, 4, keyboard_visible);
-			break;
-		case '5':
-			lastKey = 5;
-			au_note_play (core, 5, keyboard_visible);
-			break;
-		case '6':
-			lastKey = 6;
-			au_note_play (core, 6, keyboard_visible);
-			break;
-		case '7':
-			lastKey = 7;
-			au_note_play (core, 7, keyboard_visible);
-			break;
-		case '8':
-			lastKey = 8;
-			au_note_play (core, 8, keyboard_visible);
-			break;
-		case '9':
-			lastKey = 9;
-			au_note_play (core, 9, keyboard_visible);
-			break;
+		case '1': au_note_play (core, 1, keyboard_visible); break;
+		case '2': au_note_play (core, 2, keyboard_visible); break;
+		case '3': au_note_play (core, 3, keyboard_visible); break;
+		case '4': au_note_play (core, 4, keyboard_visible); break;
+		case '5': au_note_play (core, 5, keyboard_visible); break;
+		case '6': au_note_play (core, 6, keyboard_visible); break;
+		case '7': au_note_play (core, 7, keyboard_visible); break;
+		case '8': au_note_play (core, 8, keyboard_visible); break;
+		case '9': au_note_play (core, 9, keyboard_visible); break;
+		case '0': au_note_play (core, 10, keyboard_visible); break;
 		case '=':
-			if (keyboard_visible) {
-				keyboard_visible = false;
-			} else {
-				keyboard_visible = true;
-			}
+			keyboard_visible = !keyboard_visible;
 			break;
 		case 'n':
 			r_cons_printf ("\nWhich note? (1 2 3 4 5 6 7 8 9 0) \n");
-r_cons_flush();
+			r_cons_flush ();
 			int ch = r_cons_readchar ();
 			if (ch >= '0' && ch <= '9') {
 				au_note_set (core, ch - '0');
