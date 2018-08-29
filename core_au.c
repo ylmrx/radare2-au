@@ -653,6 +653,10 @@ static bool au_write(RCore *core, const char *args) {
 	char *sample = NULL;
 	ut64 narg = *args? r_num_math (core->num, args + 1): 0;
 	float arg = narg;
+	if (*args == '?') {
+		au_help (core);
+		return true;
+	}
 	if (arg == 0) {
 		if (*args) {
 			defaultShape = *args;
@@ -1462,6 +1466,20 @@ static int _cmd_au (RCore *core, const char *args) {
 			au_mix (core, args + 1);
 			r_core_block_read (core);
 			restoreBlocksize ();
+		}
+		break;
+	case 't': // "aut"
+		{
+			const char *frate = "2256";
+			switch (format.rate) {
+			case 44100: frate = "44ac"; break;
+			case 22050: frate = "2256"; break;
+			case 11025: frate = "112b"; break;
+			}
+			r_core_cmdf (core, "wx 52494646c657050057415645666d74201000000001000100"
+				"%s"
+				"000088580100020010004c4953541a000000494e464f495346540e0000004c61766635382e31322e3130300064617461805705004e03"
+				, frate);
 		}
 		break;
 	case 'w': // "auw"
