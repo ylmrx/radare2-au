@@ -8,7 +8,7 @@ ifeq ($(shell uname),Linux)
 LDFLAGS+=-lm
 endif
 LIBEXT=$(shell r2 -H LIBEXT)
-R2P=$(shell r2 -H USER_PLUGINS)
+R2P=$(shell r2 -H R2_USER_PLUGINS)
 
 all:
 	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC core_gamepad.c -o core_gamepad.$(LIBEXT)
