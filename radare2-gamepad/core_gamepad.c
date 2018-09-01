@@ -53,11 +53,11 @@ static ut32 sdl_gamepad() {
 			{
 				int axis = e.jaxis.axis;
 				int direction = e.jaxis.value > THRESHOLD;
-				char *k[2][2]= {
+				char *k[2][2] = {
 					{ "LEFT", "RIGHT" },
 					{ "UP", "DOWN" },
 				};
-				int q[2][2]= {
+				int q[2][2] = {
 					{ JOY_LEFT, JOY_RIGHT },
 					{ JOY_UP, JOY_DOWN }
 				};
@@ -111,6 +111,7 @@ const int bACCEPT = 0x20;
 const int bCANCEL = 0x40;
 const int bPREV = 0x100;
 const int bNEXT = 0x400;
+const bool jamMode = false;
 
 static bool menu_render(RCore *core, const char *title, const char **args, int index) {
 	int i;
@@ -164,32 +165,39 @@ static int menu (RCore *core, const char *title, const char **args) {
 }
 
 static void render (RCore *core, int k) {
-	if (k & JOY_UP) {
-		if (cmd[1] == 'x') {
-			r_core_cmd0 (core, "s-16");
-		} else {
-			r_core_cmd0 (core, "so-1");
+	if (jamMode) {
+		// TODO
+	} else {
+		if (k & JOY_UP) {
+			if (cmd[1] == 'x') {
+				r_core_cmd0 (core, "s-16");
+			} else {
+				r_core_cmd0 (core, "so-1");
+			}
+		} else if (k & JOY_DOWN) {
+			if (cmd[1] == 'x') {
+				r_core_cmd0 (core, "s+16");
+			} else {
+				r_core_cmd0 (core, "so");
+			}
 		}
-	} else if (k & JOY_DOWN) {
-		if (cmd[1] == 'x') {
-			r_core_cmd0 (core, "s+16");
-		} else {
-			r_core_cmd0 (core, "so");
+		if (k & JOY_RIGHT) {
+			r_core_cmd0 (core, "s+1");
+		} else if (k & JOY_LEFT) {
+			r_core_cmd0 (core, "s-1");
 		}
-	}
-	if (k & JOY_RIGHT) {
-		r_core_cmd0 (core, "s+1");
-	} else if (k & JOY_LEFT) {
-		r_core_cmd0 (core, "s-1");
 	}
 	if (k & bSTART) {
 		const char *args[] = {
 			"Analyze Function",
 			"Disassemble",
 			"Hexdump",
+			"Audio Wave",
+			"Audio Jam",
 			"Quit",
 			NULL
 		};
+		jamMode = false;
 		switch (menu (core, "MENU", args)) {
 		case 0:
 			r_core_cmd0 (core, "af");
@@ -201,6 +209,13 @@ static void render (RCore *core, int k) {
 			cmd = "px $r*16";
 			break;
 		case 3:
+			cmd = "aup";
+			break;
+		case 4:
+			cmd = "aupi;aup";
+			jamMode = true;
+			break;
+		case 5:
 			cmd = NULL;
 			break;
 		}
