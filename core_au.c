@@ -31,6 +31,8 @@ mv core_au.so ~/.config/radare2/plugins
 // SID is 16bit, 8bit sounds too much like PDP
 #define WAVEBITS 16
 
+extern void noise_pink(ut8 *buf, int buflen);
+extern void noise_brown(ut8 *buf, int buflen);
 static int waveType = 0;
 static int waveFreq = 500;
 static int cycleSize = 220;
@@ -45,6 +47,23 @@ static int animateMode = 0;
 static int aBlocksize = 1024*8;
 static int keyboard_offset = 0;
 static int auEffect = 0;
+static short sample;
+static ao_device *device = NULL;
+static ao_sample_format format = {0};
+
+enum {
+	NOISE_WHITE,
+	NOISE_PINK,
+	NOISE_BROWN,
+};
+
+
+static int *amplitudes = NULL;
+static int namplitudes = 0;
+static int *chords = NULL;
+static int nchords = 0;
+static int noiseType = NOISE_WHITE;
+
 
 #define captureBlocksize() int obs = core->blocksize; r_core_block_size(core, aBlocksize)
 #define restoreBlocksize() r_core_block_size (core, obs)
@@ -64,12 +83,6 @@ enum {
 	SHAPE_DEC,      // ''--.._
 };
 
-
-enum {
-	NOISE_WHITE,
-	NOISE_PINK,
-	NOISE_BROWN,
-};
 
 enum {
 	FILTER_INVERT,    // 1 -> 0
@@ -94,12 +107,6 @@ enum {
 	EFFECT_PERCENT,
 	EFFECT_LAST
 };
-
-static short sample;
-static ao_device *device = NULL;
-static ao_sample_format format = {0};
-
-static int noiseType = NOISE_WHITE;
 
 static void playNote(RCore *core) {
 	char waveTypeChar = WAVECMD[waveType % WAVETYPES];
@@ -258,9 +265,6 @@ void sample_filter(char *buf, int size, int filter, int value) {
 	}
 }
 
-static int *chords = NULL;
-static int nchords = 0;
-
 float arpeggio (float ofreq, int i, int words) {
 	int pc = (i * 100) / words;
 	if (chords) {
@@ -297,12 +301,20 @@ float au_effect (float ofreq, int i, int words) {
 
 static void au_amplitude (short *words, int count) {
 	int i;
-	for (i = 0; i< count;i++) {
-		
+	if (!amplitudes) {
+		return;
+	}
+	for (i = 0; i < count;i++) {
+		int pc = (i * 100) / count;
+		int block = 100 / namplitudes;
+		int piece = pc / block;
+		float amp = amplitudes[piece] / 100;
+		float v = (float)(words[i]);
+		words[i] = v * amp;
 	}
 }
 
-char *sample_new(float freq, int form, int *size) {
+ut8 *sample_new(float freq, int form, int *size) {
 	int i;
 	short sample; // float ?
 	float wax_sample = format.bits == 16 ? 0xffff / 3 : 0xff / 3;
@@ -313,7 +325,7 @@ char *sample_new(float freq, int form, int *size) {
 	int buf_size = 16 / 8 * format.channels * format.rate;
 	buf_size = aBlocksize;
 
-	char *buffer = calloc (buf_size, sizeof (char));
+	ut8 *buffer = calloc (buf_size, sizeof (char));
 	if (!buffer) {
 		return NULL;
 	}
@@ -673,7 +685,7 @@ static char defaultShape = 0;
 
 static bool au_write(RCore *core, const char *args) {
 	int size = 0;
-	char *sample = NULL;
+	ut8 *sample = NULL;
 	ut64 narg = *args? r_num_math (core->num, args + 1): 0;
 	float arg = narg;
 	if (*args == '?') {
@@ -1052,6 +1064,22 @@ static void phone_key(RCore *core, const char *ch) {
 		memmove (phone_str, phone_str + 1, strlen (phone_str)+ 1);
 	}
 	r_core_cmdf (core, ".(%s)", ch);
+}
+
+static void au_setamplitudes(RCore *core, const char *input) {
+	char *dinput = strdup (input);
+	RList *args = r_str_split_list (dinput, " ");
+	RListIter *iter;
+	char *arg;
+	namplitudes = r_list_length (args);
+	int i = 0;
+	free (amplitudes);
+	amplitudes = calloc (sizeof (int), namplitudes);
+	r_list_foreach (args, iter, arg) {
+		amplitudes[i++] = (int)r_num_math (core->num, arg);
+	}
+	r_list_free (args);
+	free (dinput);
 }
 
 static void au_setchords(RCore *core, const char *input) {
@@ -1590,6 +1618,9 @@ static int _cmd_au (RCore *core, const char *args) {
 	case 'E': // "auE"
 		au_setchords (core, r_str_trim_ro (args + 1));
 		break;
+	case 'N': // "auN"
+		au_setamplitudes (core, r_str_trim_ro (args + 1));
+		break;
 	case 'e': // "aue"
 		switch (args[1]) {
 		case 'p':
@@ -1639,6 +1670,7 @@ static int _cmd_au (RCore *core, const char *args) {
 		eprintf (" aui - init audio\n");
 		eprintf (" aum - mix from given address into current with bsize\n");
 		eprintf (" aun [noisetype] - select [white, pink, brown]\n");
+		eprintf (" auN [amplitudes] - space separated volume changes 100 = 1\n");
 		eprintf (" auo - apply operation with immediate\n");
 		eprintf (" aup - print wave (aupi print piano)\n");
 		eprintf (" auv - visual wave mode\n");
