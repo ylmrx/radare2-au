@@ -19,8 +19,8 @@ asm_au.$(LIBEXT): asm_au.c
 anal_au.$(LIBEXT): anal_au.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC anal_au.c -o anal_au.$(LIBEXT)
 
-core_au.$(LIBEXT): core_au.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC core_au.c -o core_au.$(LIBEXT)
+core_au.$(LIBEXT): core_au.c noise.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC noise.c core_au.c -o core_au.$(LIBEXT)
 
 a.out:
 	$(CC) $(CFLAGS) $(LDFLAGS) cpu.c audio.c

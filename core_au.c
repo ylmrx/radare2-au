@@ -64,6 +64,13 @@ enum {
 	SHAPE_DEC,      // ''--.._
 };
 
+
+enum {
+	NOISE_WHITE,
+	NOISE_PINK,
+	NOISE_BROWN,
+};
+
 enum {
 	FILTER_INVERT,    // 1 -> 0
 	FILTER_ATTACK,    // ____.'
@@ -91,6 +98,8 @@ enum {
 static short sample;
 static ao_device *device = NULL;
 static ao_sample_format format = {0};
+
+static int noiseType = NOISE_WHITE;
 
 static void playNote(RCore *core) {
 	char waveTypeChar = WAVECMD[waveType % WAVETYPES];
@@ -205,8 +214,7 @@ void sample_filter(char *buf, int size, int filter, int value) {
 				}
 				free(tmp);
 			}
-		}
-		else {
+		} else {
 			/* TODO */
 		}
 		break;
@@ -233,8 +241,7 @@ void sample_filter(char *buf, int size, int filter, int value) {
 			for (base = i; i< isize; i++) {
 				ibuf[i] = ibuf[i - base];
 			}
-		}
-		else {
+		} else {
 			// TODO
 		}
 		break;
@@ -288,6 +295,13 @@ float au_effect (float ofreq, int i, int words) {
 	return ofreq;
 }
 
+static void au_amplitude (short *words, int count) {
+	int i;
+	for (i = 0; i< count;i++) {
+		
+	}
+}
+
 char *sample_new(float freq, int form, int *size) {
 	int i;
 	short sample; // float ?
@@ -303,14 +317,22 @@ char *sample_new(float freq, int form, int *size) {
 	if (!buffer) {
 		return NULL;
 	}
-// eprintf ("bufsz %d\n", buf_size);
 	if (size) {
 		*size = buf_size; // 22050 // huh
-		// eprintf ("sz = %d\n", *size);
 	}
 	short *word = (short*)(buffer);
 	int words = buf_size / sizeof (short);
 	float ofreq = freq;
+	if (form == SHAPE_NOISE) {
+		if (noiseType == NOISE_PINK) {
+			noise_pink (buffer, buf_size);
+			return buffer;
+		}
+		if (noiseType == NOISE_BROWN) {
+			noise_brown (buffer, buf_size);
+			return buffer;
+		}
+	}
 	for (i = 0; i < words; i++) {
 		freq = au_effect (ofreq, i, words);
 		switch (form) {
@@ -425,6 +447,7 @@ char *sample_new(float freq, int form, int *size) {
 		// buffer[(2 * i) + 1] = ((unsigned short)sample >> 8) & 0xff;
 		// i++;
 	}
+	au_amplitude (word, words);
 	// sample_filter (buffer, buf_size, FILTER_SIGN, 1);
 	return buffer;
 }
@@ -1459,6 +1482,27 @@ static int _cmd_au (RCore *core, const char *args) {
 			// ao_play (device, (char *)core->block, core->blocksize);
 		}
 		break;
+	case 'n': // "aun" [noisetype]
+		if (strstr (args, "white")) {
+			noiseType = NOISE_WHITE;
+		} else if (strstr (args, "pink")) {
+			noiseType = NOISE_PINK;
+		} else if (strstr (args, "brown")) {
+			noiseType = NOISE_BROWN;
+		} else {
+			switch (noiseType) {
+			case NOISE_WHITE:
+				r_cons_printf ("white\n");
+				break;
+			case NOISE_PINK:
+				r_cons_printf ("pink\n");
+				break;
+			case NOISE_BROWN:
+				r_cons_printf ("brown\n");
+				break;
+			}
+		}
+		break;
 	case 'm': // "aum"
 		// write pattern here
 		{
@@ -1594,6 +1638,7 @@ static int _cmd_au (RCore *core, const char *args) {
 		eprintf (" auE [arpeggio] - arpeggio chords to use\n");
 		eprintf (" aui - init audio\n");
 		eprintf (" aum - mix from given address into current with bsize\n");
+		eprintf (" aun [noisetype] - select [white, pink, brown]\n");
 		eprintf (" auo - apply operation with immediate\n");
 		eprintf (" aup - print wave (aupi print piano)\n");
 		eprintf (" auv - visual wave mode\n");
