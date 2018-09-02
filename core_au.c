@@ -308,9 +308,9 @@ static void au_amplitude (short *words, int count) {
 		int pc = (i * 100) / count;
 		int block = 100 / namplitudes;
 		int piece = pc / block;
-		float amp = amplitudes[piece] / 100;
+		float amp = amplitudes[piece];
 		float v = (float)(words[i]);
-		words[i] = v * amp;
+		words[i] = v * (amp / 100);
 	}
 }
 
