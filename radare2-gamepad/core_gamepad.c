@@ -111,7 +111,7 @@ const int bACCEPT = 0x20;
 const int bCANCEL = 0x40;
 const int bPREV = 0x100;
 const int bNEXT = 0x400;
-const bool jamMode = false;
+bool jamMode = false;
 
 static bool menu_render(RCore *core, const char *title, const char **args, int index) {
 	int i;

@@ -1,5 +1,9 @@
 #include <r_util.h>
 
+// https://en.wikipedia.org/wiki/Colors_of_noise
+
+// TODO: add support for red, green, blue, violet, grey, black (silence), 
+
 void noise_pink(ut8 *buf, int buflen) {
 	int i;
 	double b0 = 0;
