@@ -1,10 +1,10 @@
 CFLAGS+=$(shell pkg-config --cflags r_util)
 #CFLAGS+=-fsanitize=address
-CFLAGS+=-g -shared -fPIC 
+CFLAGS+=-g -fPIC 
 LDFLAGS+=$(shell pkg-config --libs r_util r_io r_cons r_core)
-LDFLAGS+=-lao
+LDFLAGS+=-lao -shared
 ifeq ($(shell uname),Linux)
-  LDFLAGS+=-lm
+	LDFLAGS+=-lm
 endif
 LIBEXT=$(shell r2 -H LIBEXT)
 R2P=$(shell r2 -H R2_USER_PLUGINS)
