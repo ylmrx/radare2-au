@@ -1,29 +1,26 @@
 CFLAGS+=$(shell pkg-config --cflags r_util)
 #CFLAGS+=-fsanitize=address
-CFLAGS+=-g
+CFLAGS+=-g -shared -fPIC 
 LDFLAGS+=$(shell pkg-config --libs r_util r_io r_cons r_core)
 LDFLAGS+=-lao
 ifeq ($(shell uname),Linux)
-LDFLAGS+=-lm
+  LDFLAGS+=-lm
 endif
 LIBEXT=$(shell r2 -H LIBEXT)
 R2P=$(shell r2 -H R2_USER_PLUGINS)
 
 LIBS=core_au.$(LIBEXT) asm_au.$(LIBEXT) anal_au.$(LIBEXT)
 
-all: a.out $(LIBS)
+all: $(LIBS)
 
 asm_au.$(LIBEXT): asm_au.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC asm_au.c -o asm_au.$(LIBEXT)
+	$(CC) $(CFLAGS) $(LDFLAGS) asm_au.c -o asm_au.$(LIBEXT)
 
 anal_au.$(LIBEXT): anal_au.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC anal_au.c -o anal_au.$(LIBEXT)
+	$(CC) $(CFLAGS) $(LDFLAGS) anal_au.c -o anal_au.$(LIBEXT)
 
 core_au.$(LIBEXT): core_au.c noise.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -shared -fPIC noise.c core_au.c -o core_au.$(LIBEXT)
-
-a.out:
-	$(CC) $(CFLAGS) $(LDFLAGS) cpu.c audio.c
+	$(CC) $(CFLAGS) $(LDFLAGS) noise.c core_au.c -o core_au.$(LIBEXT)
 
 install:
 	mkdir -p $(R2P)
